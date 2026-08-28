@@ -1,6 +1,21 @@
 {
-  "schemaVersion": 3,
+  "schemaVersion": 4,
   "runtimeIdentity": "ki-buddy",
+  "source": {
+    "repository": "xlihub/KiBuddy",
+    "url": "https://github.com/xlihub/KiBuddy"
+  },
+  "internalRelease": {
+    "provider": "github",
+    "repository": "xlihub/KiBuddy",
+    "tagPrefix": "ki-buddy-v",
+    "releasePageUrl": "https://github.com/xlihub/KiBuddy/releases"
+  },
+  "publicDistribution": {
+    "provider": "github",
+    "repository": "xlihub/Ki-Buddy",
+    "releasePageUrl": "https://github.com/xlihub/Ki-Buddy/releases"
+  },
   "defaults": {
     "agentsBaseUrl": "https://ksapi.kingsware.cn",
     "language": "zh-CN"
@@ -92,11 +107,11 @@
     "cliName": "Ki CLI",
     "description": "Ki-Buddy is an AI agent desktop workspace.",
     "links": {
-      "homepage": "https://github.com/xlihub/Ki-Buddy",
-      "repository": "https://github.com/xlihub/Ki-Buddy",
+      "homepage": "https://github.com/xlihub/KiBuddy",
+      "repository": "https://github.com/xlihub/KiBuddy",
       "releases": "https://github.com/xlihub/Ki-Buddy/releases",
-      "support": "https://github.com/xlihub/Ki-Buddy/issues",
-      "feedback": "https://github.com/xlihub/Ki-Buddy/issues/new"
+      "support": "https://github.com/xlihub/KiBuddy/issues",
+      "feedback": "https://github.com/xlihub/KiBuddy/issues/new"
     }
   },
   "assets": {
@@ -121,11 +136,11 @@
     },
     "repository": {
       "type": "git",
-      "url": "git+https://github.com/xlihub/Ki-Buddy.git"
+      "url": "git+https://github.com/xlihub/KiBuddy.git"
     },
-    "homepage": "https://github.com/xlihub/Ki-Buddy#readme",
+    "homepage": "https://github.com/xlihub/KiBuddy#readme",
     "bugs": {
-      "url": "https://github.com/xlihub/Ki-Buddy/issues"
+      "url": "https://github.com/xlihub/KiBuddy/issues"
     },
     "productName": "Ki-Buddy"
   },
@@ -143,7 +158,7 @@
     "publish": {
       "provider": "github",
       "owner": "xlihub",
-      "repo": "Ki-Buddy",
+      "repo": "KiBuddy",
       "tagNamePrefix": "ki-buddy-v"
     },
     "linux": {

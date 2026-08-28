@@ -1,11 +1,11 @@
 ---
 name: release-ki-buddy
-description: 管理 xlihub/Ki-Buddy 的发布维护写操作与监控，包括选择后的 AionUi 上游同步、已公开 Ki-Core 采用、Ki-Buddy 版本准备、tag、Actions、Draft Release 核验和 worktree 清理。仅用于 Ki-Buddy；只读状态检查和候选分析使用 ki-release-maintenance，Ki-Core 自身发布使用 release-ki-core。
+description: 管理 Ki-Buddy 的发布维护写操作与监控，包括选择后的 AionUi 上游同步、已公开 Ki-Core 采用、Ki-Buddy 版本准备、tag、Actions、Draft Release 核验和 worktree 清理。仅用于 Ki-Buddy；只读状态检查和候选分析使用 ki-release-maintenance，Ki-Core 自身发布使用 release-ki-core。
 ---
 
 # Ki-Buddy 发布维护
 
-在管理员已经选择 AionUi 发布基准、Ki-Core Release 和 Ki-Buddy 目标版本后，执行 Ki-Buddy 同步与发布。把每个仓库或 GitHub 状态变更作为独立确认点，保留管理员对基准、版本、PR、tag、重试和公开 Release 的决定权。
+在管理员已经选择 AionUi 发布基准、Ki-Core Release 和 Ki-Buddy 目标版本后，执行 Ki-Buddy 同步与发布。把每个仓库或 GitHub 状态变更作为独立确认点，保留管理员对基准、版本、PR、tag、重试和内部 Release 的决定权。
 
 ## 权威资料
 
@@ -22,22 +22,25 @@ description: 管理 xlihub/Ki-Buddy 的发布维护写操作与监控，包括�
 
 ## 仓库和权限边界
 
-只操作 Git remote 规范化后严格等于 `xlihub/Ki-Buddy` 的 clone。`origin` 不匹配、仓库身份无法验证或目标是 Ki-Core、AionCore、AionUi 时停止。
+仓库发现、身份归类和历史仓库判定以 `ki-release-maintenance` 的“发现 Ki 双仓”为唯一规则来源。写操作目标以当前 `ki-buddy-product.json` 的 `source.repository` 和 `internalRelease.repository` 为准；两个值不一致，或选定 clone 的规范化 remote 与它们不一致时停止。
+
+本文中的“内部 Release”指 `internalRelease.repository` 中的 Ki-Buddy Release；`publicDistribution.repository` 只提供历史公开分发证据，不是本 skill 的写操作目标。
 
 开始前执行只读检查：
 
 1. 使用 `ki-release-maintenance` 的仓库发现规则选择唯一 Ki-Buddy clone，不自动 clone。
-2. 读取 `git status --short --branch`、`git worktree list --porcelain`、remote、当前 branch 和 HEAD。
-3. 检查 GitHub 认证，再用只读 API 验证当前账号对 `xlihub/Ki-Buddy` 的权限。认证或权限不足时停止写操作。
-4. 读取远端 `product/main`、开放 PR、正式构建 runs、tag 和 Release，避免重复创建对象。
+2. 读取并验证 `ki-buddy-product.json` 中的源码仓库与内部 Release 仓库，再与选定 clone 的规范化 remote 比较。
+3. 读取 `git status --short --branch`、`git worktree list --porcelain`、remote、当前 branch 和 HEAD。
+4. 检查 GitHub 认证，再用只读 API 验证当前账号对配置声明的源码仓库具有所需权限。认证或权限不足时停止写操作。
+5. 读取远端 `product/main`、开放 PR、正式构建 runs、tag 和 Release，避免重复创建对象。
 
 保持以下边界：
 
 - 在每个 PR 对应的专用 git worktree 中准备本地变更。保留原工作树及其中未提交的修改，不执行 `stash`。
-- 不覆盖、移动、删除或复用已经存在的公开 tag、Release 资产和历史映射。
+- 不覆盖、移动、删除或复用已经存在的 tag、已发布 Release 资产和历史映射。
 - PR 合并或关闭前保留对应 worktree。清理 worktree 和删除 branch 分别取得管理员确认，不使用 `--force`。
 - 不代替管理员批准 GitHub Environment，不调用审批 API，也不把聊天中的确认解释为 Environment approval。
-- 不代替管理员公开 Draft Release，不调用 Release 发布 API。
+- 不代替管理员将 Draft 发布为内部 Release，不调用 Release 发布 API。
 - 检测到冲突、身份不一致、来源证据缺失、确定性失败或当前仓库无法表达所选映射时停止当前写入阶段。
 - 行为改进以真实 PR、run、tag 和 Release 为依据；不为测试本 skill 创建模拟 PR、tag、Actions run 或 Release。
 
@@ -46,7 +49,7 @@ description: 管理 xlihub/Ki-Buddy 的发布维护写操作与监控，包括�
 任何改变本地文件、Git refs、GitHub 对象、Actions 状态或下载目录的命令执行前，输出确认卡并等待管理员明确回复。一次确认只授权卡片中的紧邻操作。
 
 ```text
-目标仓库：xlihub/Ki-Buddy（本地绝对路径）
+目标仓库：<source.repository>（本地绝对路径）
 base：product/main（远端 HEAD SHA）
 branch：分支名；不适用时写“无”
 当前映射：Ki-Buddy / AionUi tag+commit / Ki-Core tag+commit / AionCore tag+commit
@@ -81,12 +84,12 @@ branch：分支名；不适用时写“无”
 
 校验目标 Ki-Buddy 版本：
 
-- 高于最近公开的 Ki-Buddy 版本。
+- 高于最近已发布的 Ki-Buddy 产品版本；内部 Release 与历史公开分发证据分别核对。
 - `ki-buddy-vX.Y.Z` 在本地和远端均不存在。
-- 没有同版本的公开 Release、开放版本准备 PR 或已失败且保留的 tag。
+- 没有同版本的内部 Release、历史公开 Release、开放版本准备 PR 或已失败且保留的 tag。
 - 与管理员输入完全一致。
 
-如果管理员保留两个基准，只在 `product/main` 相对最近公开 Ki-Buddy tag 存在可发布变化时继续。没有可发布变化时停止。
+如果管理员保留两个基准，只在 `product/main` 相对最近已发布的 Ki-Buddy 产品 tag 存在可发布变化时继续。没有可发布变化时停止。
 
 ## 2. 核验两个发布基准
 
@@ -174,7 +177,7 @@ branch：分支名；不适用时写“无”
 - `CHANGELOG.ki-buddy.md`：新增目标版本条目，分别包含“Ki-Buddy 定制变化”“AionUi 上游更新”“Ki-Core 更新”；保持当前基准或 pin 时明确写明本版本未更新。
 - 根 `package.json`：不写入 Ki-Buddy 产品版本或品牌字段，与目标 AionUi commit 保持 byte-identical。
 
-CHANGELOG 只收集从最近公开 Ki-Buddy tag 到目标 release commit 的用户可见变化和必要发布说明。分别记录 Ki 定制、AionUi 累计变化、Ki-Core/AionCore 版本与 compare；不把纯格式、普通依赖整理或 workflow 调试写成产品能力。
+CHANGELOG 只收集从最近已发布的 Ki-Buddy 产品 tag 到目标 release commit 的用户可见变化和必要发布说明。分别记录 Ki 定制、AionUi 累计变化、Ki-Core/AionCore 版本与 compare；不把纯格式、普通依赖整理或 workflow 调试写成产品能力。
 
 运行并记录目标仓库当前要求的：
 
@@ -202,9 +205,9 @@ tag 推送后确认正式 workflow 的 repository、workflow、event、tag、hea
 
 所有前置 job 成功后，正式 workflow 应等待目标 commit 中声明的发布 Environment。展示 repository、workflow、run ID、URL、tag、commit 和四层映射，要求管理员在 GitHub Environment 页面亲自批准。
 
-审批后继续监控，确认 workflow 为同一 tag 和 commit 创建 Draft Release。管理员负责检查并手工公开 Draft；skill 只读取 Draft 状态、Release Notes 和资产，不执行发布操作。
+审批后继续监控，确认 workflow 为同一 tag 和 commit 创建 Draft Release。管理员负责检查并手工将 Draft 发布为内部 Release；skill 只读取 Draft 状态、Release Notes 和资产，不执行发布操作。
 
-管理员公开后重新读取 Release，不能把 Draft、Prerelease 或仍在上传资产的页面报告为完成。
+管理员发布后重新读取内部 Release，不能把 Draft、Prerelease 或仍在上传资产的页面报告为完成。
 
 ## 8. 恢复、失败和重试
 
@@ -222,21 +225,21 @@ tag 推送后确认正式 workflow 的 repository、workflow、event、tag、hea
 | 确定性失败 | 编译、测试、映射、lockfile、权限配置或资产规则需要代码/配置变化  | 普通修复 PR，并使用新的 Ki-Buddy patch 版本和 tag |
 | 证据不足   | 查询失败、日志缺失或无法证明 tag、commit、workflow、attempt 身份 | 重新读取证据，不重跑                              |
 
-重跑前重新读取原 run、当前 tag 和 workflow，确认 tag、commit、workflow 三者与失败 attempt 完全相同，再按确认卡规则处理相同 run 的重试。不得为不同 commit 复用 tag，不手工替换部分资产，不覆盖已公开 Release 的来源。
+重跑前重新读取原 run、当前 tag 和 workflow，确认 tag、commit、workflow 三者与失败 attempt 完全相同，再按确认卡规则处理相同 run 的重试。不得为不同 commit 复用 tag，不手工替换部分资产，不覆盖已发布 Release 的来源。
 
 ## 9. 完成核验
 
 同时满足以下条件才报告 Ki-Buddy 发布完成：
 
 1. `ki-buddy-vX.Y.Z` 解析到已确认的 release commit，且该 commit 位于 `product/main`。
-2. GitHub Release 已由管理员公开，非 Draft、非 Prerelease，tag 和 commit 一致。
+2. 内部 Release 已由管理员发布，非 Draft、非 Prerelease，tag 和 commit 一致。
 3. 正式 workflow 对同一 tag 和 commit 成功完成，包含代码质量、六类桌面构建、五类 Web CLI 构建和安装冒烟测试。
 4. 从目标 tag 的 workflow 和资产验证脚本重新取得资产契约，自动核验六个桌面构建类别、五个 Web CLI archive 与各自 SHA-256、安装脚本，以及六类 updater metadata。桌面类别可能产生多个发布文件；当前契约的六个类别产生八个桌面文件，按目标 tag 的实际契约核验全部文件，不按类别抽样。
 5. updater metadata 的版本、路径和内含 checksum 指向同一 Release 中的对应桌面资产；六份 metadata 全部核验。
 6. 经确认后下载目标 tag 资产验证脚本要求的全部资产，不使用代表性样本。运行目标 tag 的验证器，校验所有 checksums 与实际字节；对六个桌面类别和五个 Web CLI 类别逐类检查产物内的 bundle provenance，核对 Ki-Buddy、AionUi、Ki-Core、AionCore 四层身份和 `release-pinned` 来源。
 7. `ki-buddy-version.txt`、`ki-buddy-release.json`、`ki-buddy-product.json`、`CHANGELOG.ki-buddy.md`、tag、Release Notes 和 GitHub Release provenance 相互一致；存在关联 PR 评论时一并核对。
 
-这里的 GitHub Release provenance 包含不可变 tag 及其 commit、创建该 Release 的 workflow run/attempt/head SHA、`publishedAt`、完整资产清单，以及资产内的 bundle provenance。缺少下载确认时可以报告公开状态和名称契约已通过，但把实际字节、metadata 内容和 bundle provenance 标为“尚未验证”，不得报告发布完成。
+这里的内部 Release provenance 包含不可变 tag 及其 commit、创建该 Release 的 workflow run/attempt/head SHA、`publishedAt`、完整资产清单，以及资产内的 bundle provenance。缺少下载确认时可以报告发布状态和名称契约已通过，但把实际字节、metadata 内容和 bundle provenance 标为“尚未验证”，不得报告发布完成。
 
 人工安装测试可以另行记录，不属于完成条件。报告数据来源、检查时间、PR、run、tag、Release URL、资产核验、四层映射、provenance 和无法验证的字段。
 

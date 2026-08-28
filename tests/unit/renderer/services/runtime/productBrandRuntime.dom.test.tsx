@@ -87,7 +87,7 @@ describe('renderer product brand adapter', () => {
 
     expect(getRendererBrand().productName).toBe('Ki-Buddy');
     expect(getRendererBrand().links.releases).toBe('https://github.com/xlihub/Ki-Buddy/releases');
-    expect(getProductContactUrl()).toBe('https://github.com/xlihub/Ki-Buddy/issues');
+    expect(getProductContactUrl()).toBe('https://github.com/xlihub/KiBuddy/issues');
     expect(getProductDownloadUrl()).toBe('https://github.com/xlihub/Ki-Buddy/releases');
     expect(getRendererAppVersion()).toBe('0.1.1');
   });

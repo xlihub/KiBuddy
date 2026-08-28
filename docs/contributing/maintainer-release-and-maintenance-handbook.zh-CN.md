@@ -1,8 +1,12 @@
 # Ki-Buddy 与 Ki-Core 仓库管理者发版和维护手册
 
 > 当前管理者：`xlihub`
-> 最近核对时间：2026-08-07
-> 适用仓库：`xlihub/Ki-Buddy`、`xlihub/Ki-Core`
+> 最近核对时间：2026-08-28
+> 适用仓库：private `xlihub/KiBuddy`、public `xlihub/Ki-Core`
+
+historical public `xlihub/Ki-Buddy` 仅保存 0.1.7 及更早版本的源码、tag、Release 和资产证据，不再接收当前产品 PR、Actions 或内部 Release。
+
+本文使用以下术语：Ki-Buddy 当前发布流程中的“内部 Release”对应 `ki-buddy-product.json` 的 `internalRelease`；“历史公开分发证据”对应 `publicDistribution`；“runtime update source”对应 `updates`。Ki-Core、AionUi 和 AionCore 的 GitHub Release 继续称为公开 Release。
 
 本文按实际工作场景说明仓库管理者每天、每次上游更新和每次发版需要处理的事项。读完后，管理者应当能够判断下一步该同步哪个仓库、合并哪个 PR、批准哪个 workflow，以及遇到失败时是否允许重试或必须创建新版本。
 
@@ -54,7 +58,7 @@ Ki-Core 第一次正式发布已于 2026-08-06 完成，Ki-Buddy 第一次正式
 - 把 Candidate Actions artifact 当作 Ki-Buddy 正式依赖。
 - 移动或重建 `ki-core-v0.1.0`。
 - 移动或重建 `ki-buddy-v0.1.0`、`ki-buddy-v0.1.1`。
-- 覆盖来源不同的公开 Release 资产。
+- 覆盖来源不同的历史公开 Release 资产。
 - 复用旧 PR 的 pending 标签或把普通功能分支伪装成 Release PR。
 
 ## 2. 管理者日常检查
@@ -81,25 +85,25 @@ gh release list --repo iOfficeAI/AionUi --exclude-drafts --exclude-pre-releases 
 
 AionCore 至少要求六个平台 archive 与 `aioncore-checksums.txt`。AionUi 的资产矩阵从目标 tag 的发布 workflow 和验证脚本读取，不把某个历史版本的资产数量写成永久规则。公开但仍在构建、workflow 失败或资产不全的 Release 不属于候选版本。
 
-同时查看 Ki 产品当前公开版本，并与本地映射核对：
+同时查看 Ki-Core 当前公开 Release 和 Ki-Buddy 当前内部 Release，并与本地映射核对：
 
 ```bash
 gh release view --repo xlihub/Ki-Core --json tagName,publishedAt,url
-gh release view --repo xlihub/Ki-Buddy --json tagName,publishedAt,url
+gh release view --repo xlihub/KiBuddy --json tagName,publishedAt,url
 ```
 
 仓库没有 Release 时，`gh release view` 失败属于预期状态，应改用：
 
 ```bash
 gh release list --repo xlihub/Ki-Core
-gh release list --repo xlihub/Ki-Buddy
+gh release list --repo xlihub/KiBuddy
 ```
 
 ### 2.2 查看待处理 PR
 
 ```bash
 gh pr list --repo xlihub/Ki-Core --state open
-gh pr list --repo xlihub/Ki-Buddy --state open
+gh pr list --repo xlihub/KiBuddy --state open
 ```
 
 重点识别：
@@ -113,7 +117,7 @@ gh pr list --repo xlihub/Ki-Buddy --state open
 
 ```bash
 gh run list --repo xlihub/Ki-Core --limit 20
-gh run list --repo xlihub/Ki-Buddy --limit 20
+gh run list --repo xlihub/KiBuddy --limit 20
 ```
 
 检查具体失败：
@@ -409,7 +413,7 @@ Ki-Buddy 接入自己的 Sentry 项目后，先配置 `SENTRY_DSN`、`SENTRY_AUT
 
 六个平台中 Windows ARM64 通常最慢。首次成功发布约用 25 分钟完成该平台构建，随后还需要 Environment 审批和资产汇总；运行时间较长时应查看 job 是否仍有日志和 runner 活动，不要直接判断为卡死。
 
-### 7.4 审批和发布 Draft
+### 7.4 审批并发布内部 Release
 
 正式 workflow 在所有代码质量、桌面构建和 Web CLI job 成功后才请求 `ki-buddy-stable` 审批。批准前确认请求来自预期 tag 和 commit。批准后 workflow 才会下载构建资产并创建 Draft Release。
 
@@ -425,9 +429,9 @@ Ki-Buddy 接入自己的 Sentry 项目后，先配置 `SENTRY_DSN`、`SENTRY_AUT
 
 首次 `0.1.1` 的资产总数为 25：8 个桌面安装资产、5 个 Web CLI archive、5 个 Web CLI SHA-256、6 个 updater metadata 和 1 个 Web CLI 安装脚本。Release Notes 是 Release 正文，不计入资产数。平台矩阵或发布格式发生变化时应按 workflow 重新计算，不能把 25 永久写成验证器常量。
 
-检查通过后再公开 Release。确认未勾选 Prerelease，并按产品需要设置为 Latest；公开操作由 `xlihub` 手工完成，workflow 只创建 Draft。Release 的 `targetCommitish` 显示 `product/main` 不代表 tag 会随分支移动，最终来源以不可变 tag 的 commit 为准。
+检查通过后，由 `xlihub` 手工将 Draft 发布为内部 Release；workflow 只创建 Draft。确认未勾选 Prerelease，并按产品需要设置为 Latest。Release 的 `targetCommitish` 显示 `product/main` 不代表 tag 会随分支移动，最终来源以不可变 tag 的 commit 为准。
 
-公开后检查 Release 页面不再显示 Draft，并复核 tag、commit、资产、checksums、版本映射和 provenance。人工安装测试可以另行记录，但不属于发布完成条件。首次 `0.1.1` 已由维护者下载 macOS DMG 并安装成功，这只是历史验证记录。
+发布后检查内部 Release 页面不再显示 Draft，并复核 tag、commit、资产、checksums、版本映射和 provenance。人工安装测试可以另行记录，但不属于发布完成条件。首次 `0.1.1` 已由维护者下载 macOS DMG 并安装成功，这只是历史验证记录。
 
 ### 7.5 首次发布的实际结果
 
@@ -553,7 +557,7 @@ Ki-Buddy 已进行定制开发，冲突需要按用户行为处理：
 
 - 代码或 lockfile 已变化。
 - tag 已指向不同 commit。
-- 需要使用不同 commit 或人工替换部分公开资产。
+- 需要使用不同 commit 或人工替换部分已发布 Release 资产。
 - checksums 与原资产不一致。
 
 后一类情况必须创建新 patch 版本。
@@ -587,7 +591,7 @@ Ki-Buddy `0.1.0` 是“需要修改 workflow 代码”的确定性失败，因�
 ### 版本与映射
 
 - 检查每个公开 Ki-Core tag 都有唯一映射。
-- 检查每个公开 Ki-Buddy tag 都能追溯到 AionUi、Ki-Core 和 AionCore。
+- 检查每个历史公开 Ki-Buddy tag 都能追溯到 AionUi、Ki-Core 和 AionCore。
 - 检查产品 CHANGELOG 与 Release Notes 一致。
 - 检查上游 CHANGELOG 没有被产品内容改写。
 
@@ -630,7 +634,7 @@ Ki-Buddy `0.1.0` 是“需要修改 workflow 代码”的确定性失败，因�
 - [ ] updater metadata 与正式 tag 一致。
 - [ ] `xlihub` 批准的是预期 tag 和 commit 的 `ki-buddy-stable` 请求。
 - [ ] Draft Release 资产数量、文件名、checksums、说明和来源映射检查完成。
-- [ ] 由 `xlihub` 公开发布。
+- [ ] 由 `xlihub` 发布为内部 Release。
 
 人工安装测试可在发布后另行记录验证者与结果，不属于以上检查表的完成条件。
 
@@ -641,7 +645,7 @@ Ki-Buddy `0.1.0` 是“需要修改 workflow 代码”的确定性失败，因�
 - `xlihub` 可以触发并批准发布。
 - 发布审批允许 self-review。
 - 自动化可以创建 PR、tag 和 Release，但不能自行决定是否接受上游版本。
-- 自动化不能覆盖已公开 tag 和资产。
-- 版本号、上游映射、CHANGELOG 和公开 Release 的最终责任属于 `xlihub`。
+- 自动化不能覆盖已发布 tag 和资产。
+- 版本号、上游映射、CHANGELOG、Ki-Core 公开 Release 和 Ki-Buddy 内部 Release 的最终责任属于 `xlihub`。
 
 未来增加维护者后，优先调整审批规则，不需要重新设计双仓分支和版本模型。

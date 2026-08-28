@@ -22,14 +22,22 @@ const { createSourceStateSha256, readKiBuddyRelease } =
   };
 
 export type ProductBuildEvidence = Readonly<{
-  schemaVersion: 1;
+  schemaVersion: 2;
   product: Readonly<{
     productName: string;
     runtimeIdentity: string;
   }>;
-  sourceCommit: string;
-  sourceStateSha256: string;
-  sourceTreeDirty: boolean;
+  source: Readonly<{
+    commit: string;
+    repository: string;
+    stateSha256: string;
+    treeDirty: boolean;
+  }>;
+  release: Readonly<{
+    internal: Readonly<{ repository: string }>;
+    publicDistribution: Readonly<{ repository: string }>;
+    runtimeUpdates: Readonly<{ repository: string }>;
+  }>;
   policySources: Readonly<{
     experienceRegistry: Readonly<{ path: string; sha256: string }>;
     productConfig: Readonly<{ path: string; sha256: string }>;

@@ -90,9 +90,67 @@ function sha256(relativePath: string): string {
 }
 
 describe('Ki-Buddy product release identity', () => {
+  it('separates source, internal release, public distribution, and runtime update identities', () => {
+    expect(readProductConfig(projectRoot)).toMatchObject({
+      source: {
+        repository: 'xlihub/KiBuddy',
+        url: 'https://github.com/xlihub/KiBuddy',
+      },
+      internalRelease: {
+        provider: 'github',
+        repository: 'xlihub/KiBuddy',
+        tagPrefix: 'ki-buddy-v',
+        releasePageUrl: 'https://github.com/xlihub/KiBuddy/releases',
+      },
+      publicDistribution: {
+        provider: 'github',
+        repository: 'xlihub/Ki-Buddy',
+        releasePageUrl: 'https://github.com/xlihub/Ki-Buddy/releases',
+      },
+      updates: {
+        provider: 'github',
+        repository: 'xlihub/Ki-Buddy',
+        tagPrefix: 'ki-buddy-v',
+        releasePageUrl: 'https://github.com/xlihub/Ki-Buddy/releases',
+      },
+    });
+  });
+
   it('validates the current product mapping without requiring repository history', () => {
     expect(() => verifyKiBuddyRelease(projectRoot, { skipGit: true })).not.toThrow();
   });
+
+  it('validates the 0.1.8 release context for the private source repository', () => {
+    expect(
+      verifyKiBuddyRelease(projectRoot, {
+        commit: 'a'.repeat(40),
+        repository: 'xlihub/KiBuddy',
+        skipGit: true,
+        tag: 'ki-buddy-v0.1.8',
+      })
+    ).toMatchObject({
+      kiBuddy: {
+        repository: 'xlihub/KiBuddy',
+        version: '0.1.8',
+        tag: 'ki-buddy-v0.1.8',
+        releaseCommit: 'a'.repeat(40),
+      },
+    });
+  });
+
+  it.each(['xlihub/Ki-Buddy', 'xlihub/Ki-Core', 'iOfficeAI/AionCore', 'iOfficeAI/AionUi', 'xlihub/Other'])(
+    'rejects release preflight from a non-source repository: %s',
+    (repository) => {
+      expect(() =>
+        verifyKiBuddyRelease(projectRoot, {
+          commit: 'a'.repeat(40),
+          repository,
+          skipGit: true,
+          tag: 'ki-buddy-v0.1.8',
+        })
+      ).toThrow('Ki-Buddy release repository must be xlihub/KiBuddy');
+    }
+  );
 
   it('allows only declared product dependencies in the upstream package comparison', () => {
     const upstreamPackage = { name: 'AionUi', dependencies: { react: '^19.0.0' } };
@@ -123,7 +181,7 @@ describe('Ki-Buddy product release identity', () => {
 
   it('keeps the Ki-Buddy defaults in the product configuration', () => {
     const config = readProductConfig(projectRoot);
-    expect(config.schemaVersion).toBe(3);
+    expect(config.schemaVersion).toBe(4);
     expect(config.defaults).toEqual({
       agentsBaseUrl: 'https://ksapi.kingsware.cn',
       language: 'zh-CN',
@@ -195,79 +253,186 @@ describe('Ki-Buddy product release identity', () => {
     });
   });
 
-  it('rejects malformed runtime identity and product defaults', () => {
-    const source = JSON.parse(readFileSync(join(projectRoot, 'ki-buddy-product.json'), 'utf8'));
-    for (const mutate of [
-      (config: typeof source) => {
+  const productConfigSource = JSON.parse(readFileSync(join(projectRoot, 'ki-buddy-product.json'), 'utf8'));
+
+  it.each([
+    {
+      name: 'an empty runtime identity',
+      expectedError: 'Ki-Buddy runtime identity must be a non-empty string',
+      mutate: (config: typeof productConfigSource) => {
         config.runtimeIdentity = '';
       },
-      (config: typeof source) => {
+    },
+    {
+      name: 'the historical public repository as the source identity',
+      expectedError: 'Ki-Buddy source repository identity is invalid',
+      mutate: (config: typeof productConfigSource) => {
+        config.source.repository = 'xlihub/Ki-Buddy';
+      },
+    },
+    {
+      name: 'the historical public repository as the internal release identity',
+      expectedError: 'Ki-Buddy internal release identity is invalid',
+      mutate: (config: typeof productConfigSource) => {
+        config.internalRelease.repository = 'xlihub/Ki-Buddy';
+      },
+    },
+    {
+      name: 'the private source repository as the public distribution identity',
+      expectedError: 'Ki-Buddy public distribution identity is invalid',
+      mutate: (config: typeof productConfigSource) => {
+        config.publicDistribution.repository = 'xlihub/KiBuddy';
+      },
+    },
+    {
+      name: 'the private source repository as the runtime update identity',
+      expectedError: 'Ki-Buddy update configuration is invalid',
+      mutate: (config: typeof productConfigSource) => {
+        config.updates.repository = 'xlihub/KiBuddy';
+      },
+    },
+    {
+      name: 'a non-HTTP Agents base URL',
+      expectedError: 'Ki-Buddy default Agents base URL must be an HTTP(S) URL',
+      mutate: (config: typeof productConfigSource) => {
         config.defaults.agentsBaseUrl = 'ftp://agents.example.com';
       },
-      (config: typeof source) => {
+    },
+    {
+      name: 'an empty default language',
+      expectedError: 'Ki-Buddy default language must be a non-empty string',
+      mutate: (config: typeof productConfigSource) => {
         config.defaults.language = '';
       },
-      (config: typeof source) => {
+    },
+    {
+      name: 'an empty locale namespace',
+      expectedError: 'Ki-Buddy locale namespace must be a non-empty string',
+      mutate: (config: typeof productConfigSource) => {
         config.locale.namespace = '';
       },
-      (config: typeof source) => {
+    },
+    {
+      name: 'an empty dark theme resource id',
+      expectedError: 'Ki-Buddy dark theme must be a non-empty resource id',
+      mutate: (config: typeof productConfigSource) => {
         config.themes.dark = '';
       },
-      (config: typeof source) => {
+    },
+    {
+      name: 'an additional protocol scheme',
+      expectedError: 'Ki-Buddy protocol configuration must contain only the independent product protocol',
+      mutate: (config: typeof productConfigSource) => {
         config.electronBuilder.protocols[0].schemes.push('unexpected');
       },
-      (config: typeof source) => {
+    },
+    {
+      name: 'an unexpected protocol field',
+      expectedError: 'Ki-Buddy protocol configuration has unexpected or missing fields',
+      mutate: (config: typeof productConfigSource) => {
         config.electronBuilder.protocols[0].unexpected = true;
       },
-      (config: typeof source) => {
+    },
+    {
+      name: 'a missing protocol name',
+      expectedError: 'Ki-Buddy protocol configuration has unexpected or missing fields',
+      mutate: (config: typeof productConfigSource) => {
         delete config.electronBuilder.protocols[0].name;
       },
-      (config: typeof source) => {
+    },
+    {
+      name: 'an unexpected publish field',
+      expectedError: 'Ki-Buddy electron-builder publish configuration has unexpected or missing fields',
+      mutate: (config: typeof productConfigSource) => {
         config.electronBuilder.publish.unexpected = true;
       },
-      (config: typeof source) => {
+    },
+    {
+      name: 'a missing publish owner',
+      expectedError: 'Ki-Buddy electron-builder publish configuration has unexpected or missing fields',
+      mutate: (config: typeof productConfigSource) => {
         delete config.electronBuilder.publish.owner;
       },
-      (config: typeof source) => {
+    },
+    {
+      name: 'an unexpected Linux configuration field',
+      expectedError: 'Ki-Buddy Linux configuration has unexpected or missing fields',
+      mutate: (config: typeof productConfigSource) => {
         config.electronBuilder.linux.unexpected = true;
       },
-      (config: typeof source) => {
+    },
+    {
+      name: 'a missing Linux maintainer',
+      expectedError: 'Ki-Buddy Linux configuration has unexpected or missing fields',
+      mutate: (config: typeof productConfigSource) => {
         delete config.electronBuilder.linux.maintainer;
       },
-      (config: typeof source) => {
+    },
+    {
+      name: 'an unexpected Linux desktop field',
+      expectedError: 'Ki-Buddy Linux desktop configuration has unexpected or missing fields',
+      mutate: (config: typeof productConfigSource) => {
         config.electronBuilder.linux.desktop.unexpected = true;
       },
-      (config: typeof source) => {
+    },
+    {
+      name: 'an unexpected Linux desktop entry field',
+      expectedError: 'Ki-Buddy Linux desktop entry has unexpected or missing fields',
+      mutate: (config: typeof productConfigSource) => {
         config.electronBuilder.linux.desktop.entry.unexpected = true;
       },
-      (config: typeof source) => {
+    },
+    {
+      name: 'a missing Linux desktop entry name',
+      expectedError: 'Ki-Buddy Linux desktop entry has unexpected or missing fields',
+      mutate: (config: typeof productConfigSource) => {
         delete config.electronBuilder.linux.desktop.entry.Name;
       },
-      (config: typeof source) => {
+    },
+    {
+      name: 'an incorrect product name',
+      expectedError: 'Ki-Buddy brand product name is invalid',
+      mutate: (config: typeof productConfigSource) => {
         config.brand.productName = 'Wrong Product';
       },
-      (config: typeof source) => {
+    },
+    {
+      name: 'null package author metadata',
+      expectedError: 'Ki-Buddy package author must be an object',
+      mutate: (config: typeof productConfigSource) => {
         config.packageMetadata.author = null;
       },
-      (config: typeof source) => {
-        config.packageMetadata.repository.url = 'ftp://github.com/xlihub/Ki-Buddy.git';
+    },
+    {
+      name: 'a non-HTTP package repository URL',
+      expectedError: 'Ki-Buddy package repository URL must be an absolute HTTP(S) URL',
+      mutate: (config: typeof productConfigSource) => {
+        config.packageMetadata.repository.url = 'ftp://github.com/xlihub/KiBuddy.git';
       },
-      (config: typeof source) => {
+    },
+    {
+      name: 'a relative package homepage URL',
+      expectedError: 'Ki-Buddy package homepage must be an absolute HTTP(S) URL',
+      mutate: (config: typeof productConfigSource) => {
         config.packageMetadata.homepage = '/readme';
       },
-      (config: typeof source) => {
+    },
+    {
+      name: 'null package bugs metadata',
+      expectedError: 'Ki-Buddy package bugs must be an object',
+      mutate: (config: typeof productConfigSource) => {
         config.packageMetadata.bugs = null;
       },
-    ]) {
-      const tempDir = mkdtempSync(join(tmpdir(), 'ki-buddy-product-config-'));
-      try {
-        const config = structuredClone(source);
-        mutate(config);
-        writeFileSync(join(tempDir, 'ki-buddy-product.json'), JSON.stringify(config));
-        expect(() => readProductConfig(tempDir)).toThrow();
-      } finally {
-        rmSync(tempDir, { recursive: true, force: true });
-      }
+    },
+  ])('rejects $name', ({ expectedError, mutate }) => {
+    const tempDir = mkdtempSync(join(tmpdir(), 'ki-buddy-product-config-'));
+    try {
+      const config = structuredClone(productConfigSource);
+      mutate(config);
+      writeFileSync(join(tempDir, 'ki-buddy-product.json'), JSON.stringify(config));
+      expect(() => readProductConfig(tempDir)).toThrow(expectedError);
+    } finally {
+      rmSync(tempDir, { recursive: true, force: true });
     }
   });
 
@@ -351,8 +516,12 @@ describe('Ki-Buddy product release identity', () => {
       expectedResources.push({ from: evidencePath, to: 'ki-buddy-build-evidence.json' });
       expect(config.extraResources).toEqual(expectedResources);
       expect(JSON.parse(readFileSync(evidencePath, 'utf8'))).toMatchObject({
+        schemaVersion: 2,
         product: { runtimeIdentity: 'ki-buddy', productName: 'Ki-Buddy' },
-        sourceCommit: expect.stringMatching(/^[0-9a-f]{40}$/),
+        source: {
+          repository: 'xlihub/KiBuddy',
+          commit: expect.stringMatching(/^[0-9a-f]{40}$/),
+        },
       });
       expect(JSON.parse(readFileSync(outputPath, 'utf8'))).toEqual(config);
       expect(readFileSync(join(projectRoot, 'package.json'), 'utf8')).toBe(originalPackage);
@@ -374,14 +543,36 @@ describe('Ki-Buddy product release identity', () => {
       });
 
       expect(evidence).toEqual({
-        schemaVersion: 1,
+        schemaVersion: 2,
         product: {
           runtimeIdentity: 'ki-buddy',
           productName: 'Ki-Buddy',
         },
-        sourceCommit: testedCommit,
-        sourceTreeDirty: false,
-        sourceStateSha256,
+        source: {
+          repository: 'xlihub/KiBuddy',
+          commit: testedCommit,
+          treeDirty: false,
+          stateSha256: sourceStateSha256,
+        },
+        release: {
+          internal: {
+            provider: 'github',
+            repository: 'xlihub/KiBuddy',
+            tagPrefix: 'ki-buddy-v',
+            releasePageUrl: 'https://github.com/xlihub/KiBuddy/releases',
+          },
+          publicDistribution: {
+            provider: 'github',
+            repository: 'xlihub/Ki-Buddy',
+            releasePageUrl: 'https://github.com/xlihub/Ki-Buddy/releases',
+          },
+          runtimeUpdates: {
+            provider: 'github',
+            repository: 'xlihub/Ki-Buddy',
+            tagPrefix: 'ki-buddy-v',
+            releasePageUrl: 'https://github.com/xlihub/Ki-Buddy/releases',
+          },
+        },
         policySources: {
           productConfig: {
             path: 'ki-buddy-product.json',
@@ -409,9 +600,12 @@ describe('Ki-Buddy product release identity', () => {
           sourceStateSha256: 'd'.repeat(64),
         })
       ).toMatchObject({
-        sourceCommit: 'b'.repeat(40),
-        sourceTreeDirty: true,
-        sourceStateSha256: 'd'.repeat(64),
+        source: {
+          repository: 'xlihub/KiBuddy',
+          commit: 'b'.repeat(40),
+          treeDirty: true,
+          stateSha256: 'd'.repeat(64),
+        },
       });
     } finally {
       rmSync(tempDir, { recursive: true, force: true });
@@ -462,6 +656,21 @@ describe('Ki-Buddy product release identity', () => {
 
   it('records the full AionUi, Ki-Core and AionCore mapping', () => {
     const identity = readKiBuddyRelease(projectRoot);
+    expect(identity.kiBuddySource).toEqual({
+      repository: 'xlihub/KiBuddy',
+      url: 'https://github.com/xlihub/KiBuddy',
+    });
+    expect(identity.publicDistribution).toEqual({
+      provider: 'github',
+      repository: 'xlihub/Ki-Buddy',
+      releasePageUrl: 'https://github.com/xlihub/Ki-Buddy/releases',
+    });
+    expect(identity.runtimeUpdates).toEqual({
+      provider: 'github',
+      repository: 'xlihub/Ki-Buddy',
+      tagPrefix: 'ki-buddy-v',
+      releasePageUrl: 'https://github.com/xlihub/Ki-Buddy/releases',
+    });
     expect(identity.kiBuddy.tag).toBe(`ki-buddy-v${identity.kiBuddy.version}`);
     expect(identity.kiCore.tag).toBe(`ki-core-v${identity.kiCore.version}`);
     expect(identity.aionUi.tag).toMatch(/^v\d+\.\d+\.\d+$/);
