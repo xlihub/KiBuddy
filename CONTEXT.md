@@ -16,6 +16,138 @@ _Avoid_：最新上游、默认版本
 Ki-Core 与 Ki-Buddy 根据自身产品计划决定发布时间和版本号，上游发布只提供候选版本。
 _Avoid_：延迟一周同步、跟随上游发布
 
+**通用产品公开分发源**：
+面向普通 Ki-Buddy 用户公开提供正式安装包和自动更新元数据的自建 OSS/CDN；源码仓库及其 GitHub Release 不承担客户端公开下载或更新服务。
+_Avoid_：GitHub public Release、项目交付渠道、源码仓库
+
+**Ki 产品源码边界**：
+由 standalone private `KiBuddy` 与 public fork `Ki-Core` 组成的并列源码边界；两者分别跟随自己的 public upstream，保留独立历史、版本和发布节奏，不组成 monorepo 或源码包含关系。
+_Avoid_：KiBuddy monorepo、private `KiCore`、Git submodule
+
+**通用产品源码仓库**：
+名为 `KiBuddy` 的 standalone private repository，保存 Ki-Buddy 桌面产品源码、AionUi 上游映射和项目分发分支。
+_Avoid_：通用服务端源码仓库、AionUi public fork、公开分发源
+
+**通用服务端源码仓库**：
+现有 public fork `xlihub/Ki-Core`，保存 Ki-Core 服务端产品源码和 AionCore 上游映射；它拥有独立于 KiBuddy 的版本与发布节奏，并继续作为 KiBuddy 的公开二进制来源。
+_Avoid_：private `KiCore`、通用产品源码仓库、KiBuddy 子目录
+
+**历史公开产品源码仓库**：
+现有 public fork `Ki-Buddy`；完成 private KiBuddy 迁移后作为只读历史保存，不再承担新的产品开发或发布。
+_Avoid_：通用产品源码仓库、通用服务端源码仓库、长期镜像仓库
+
+**内部产品 Release**：
+private `KiBuddy` 仓库中的 GitHub tag 和 Release，用于汇集桌面产品的已验证资产、审批和记录来源；它不是 Ki-Buddy 用户公开下载或自动更新的来源。
+_Avoid_：通用产品公开分发源、GitHub public Release、项目交付记录
+
+**Ki-Core 二进制来源**：
+public `xlihub/Ki-Core` 的不可变 Release 或已验证 candidate artifact；KiBuddy 将其二进制和 managed resources 打入安装包，并保留公开仓库、版本、commit 与 checksum provenance，但不包含 Ki-Core 源码。
+_Avoid_：private KiCore、源码内嵌、匿名二进制
+
+**项目分发版本**：
+面向一个指定客户或项目、长期维护并可重复构建和升级的 Ki-Buddy 专属版本；它拥有独立于标准 Ki-Buddy 和其他项目分发版本的安装与数据身份。
+_Avoid_：临时构建、客户定制包、标准 Ki-Buddy Release
+
+**预览构建**：
+供项目内部验证的项目分发版本构建结果，不构成面向客户的正式交付。
+_Avoid_：正式交付包、正式 Release
+
+**正式交付构建**：
+经过项目规定的质量、安全和授权检查，可交付给目标客户使用的项目分发版本构建结果。
+_Avoid_：预览包、调试构建、标准 Ki-Buddy Release
+
+**项目安装身份**：
+一个项目分发版本在操作系统、本地数据和系统凭据中的唯一身份，使其可以与标准 Ki-Buddy 及其他项目分发版本共存。
+_Avoid_：显示名称、项目分支名、标准 Ki-Buddy 身份
+
+**项目分发基准**：
+一个项目分发版本明确采用的 `product/main` commit；项目可以按自己的维护节奏选择基准，不自动采用当前最新提交。
+_Avoid_：最新 Ki-Buddy、当前 `product/main`、标准 Ki-Buddy 发布基准
+
+**项目版本**：
+项目分发版本独立维护的 SemVer，用于表达该项目自身的升级顺序；对应的 Ki-Buddy 项目分发基准作为独立来源证据记录。
+_Avoid_：Ki-Buddy 版本、workflow run ID、构建日期
+
+**项目分发清单**：
+受版本控制的项目配置声明，描述一个项目分发版本采用的非敏感产品配置；任何进入安装包或改变运行行为的变化都形成新的项目版本，它不能扩大项目注册记录授予的范围，也不能保存长期凭据。
+_Avoid_：项目授权记录、标准产品配置、项目凭据
+
+**Ki-Buddy runtime family**：
+标准 Ki-Buddy 与所有项目分发版本共享的产品能力和 runtime contract；具体项目通过 `distributionId` 区分，不创建新的 runtime 产品类别。
+_Avoid_：项目 runtime、标准 Ki-Buddy 安装身份、项目分发版本
+
+**distributionId**：
+一个项目分发版本在 Ki-Buddy runtime family 中不可变且全局唯一的非敏感 slug；它可以出现在安装身份、构建证据和日志中，项目名称、分支名和版本变化不会改变它。
+_Avoid_：客户名称、随机密钥、branch、appId、项目版本
+
+**项目注册记录**：
+由 Ki-Buddy 基线维护、用于确认一个 `distributionId` 已获准存在及其生命周期、不可变身份和交付授权边界的权威记录；项目分发清单与它冲突时不能构建。
+_Avoid_：项目分发清单、项目业务配置、项目凭据
+
+**项目注册状态**：
+项目注册记录对新构建的授权状态：`active` 允许预览和正式交付，`suspended` 只允许预览，`retired` 禁止所有新构建、撤销项目构建密钥并使分发分支只读，同时保留交付证据且对应 `distributionId` 永不复用；它不控制已经交付客户端的运行状态。
+_Avoid_：branch 状态、项目版本状态、客户使用状态
+
+**项目交付记录**：
+一次正式交付的长期来源证据，标识项目版本、源码、项目注册记录、项目分发清单、目标平台、候选 attempt、安装包摘要和持久保管引用，但不保存安装包本身。
+_Avoid_：Actions artifact、项目分发清单、GitHub Release
+
+**项目交付候选**：
+正式交付构建通过自动检查后产生、等待管理员完成安装验收和交付确认的安装包集合；同一项目版本的正式构建串行执行，可以有多个具有独立摘要的候选 attempt，只有被确认交付的 attempt 固定该版本。
+_Avoid_：项目交付记录、正式 Release、已交付版本
+
+**项目持久交付副本**：
+由项目交付负责人长期保管、与项目交付记录中的摘要和保管引用一致的安装包集合；临时构建 artifact 不构成持久交付副本。
+_Avoid_：Actions artifact、重新构建产物、项目交付记录
+
+**正式构建源**：
+项目正式交付构建采用的精确源码版本，必须属于对应项目受保护的分发分支并已通过规定检查；未合并源码只能产生预览构建。
+_Avoid_：任意 commit、可变 branch head、预览源码
+
+**项目构建密钥域**：
+一个 `distributionId` 的正式构建可以使用、且不能被其他项目或预览构建读取的受保护凭据范围；项目源码和安装包不得包含其中的长期凭据。
+_Avoid_：仓库全部 secrets、共享项目密钥、随包凭据
+
+**项目预览身份**：
+项目内部预览构建使用的独立安装与数据身份，不与同一项目的正式安装共享本地状态。
+_Avoid_：项目安装身份、正式交付构建、调试参数
+
+**项目身份模式**：
+项目分发版本对用户身份来源作出的单一明确选择：`local` 不要求登录，`agents` 使用 Agents 平台账户，`external` 通过项目身份 adapter 使用第三方账户；同一 `distributionId` 的身份模式在其生命周期内保持不变。`external` 是远期架构方向，不属于当前项目分发实现。
+_Avoid_：登录页面类型、项目体验策略、自动身份检测
+
+**当前可交付身份模式**：
+当前项目分发可以实际构建和交付的 `local` 与 `agents` 两种项目身份模式；第三方 `external` 身份不能作为当前项目分发清单的有效选择，也不提供不可用入口或占位能力。
+_Avoid_：`external`、目标身份模式、自动身份检测
+
+**项目身份 adapter**：
+远期由项目拥有的窄集成模块，为 `external` 身份模式提供第三方会话、稳定用户主体和权限声明；第三方协议和凭据不进入公共身份入口。
+_Avoid_：Agents MCP Adapter、公共登录 service、第三方 SDK 全局封装
+
+**项目身份投影**：
+将项目身份模式提供的稳定用户主体映射为 Core 用户的关系；投影包含 `distributionId` 和身份提供方边界，避免跨项目、租户或提供方共享本地用户空间。
+_Avoid_：Agents 身份投影、username 映射、`system_default_user`
+
+**项目权限声明**：
+项目身份 adapter 为改善客户端交互提供的当前用户能力信息；最终资源授权仍由第三方服务端执行，客户端显隐不构成安全授权。
+_Avoid_：产品体验策略、服务端授权、角色名称
+
+**Agents Gateway 集成**：
+项目分发版本是否启用 Agents catalog、远端调用和 Agents MCP Adapter 的独立集成选择；它不由项目身份模式或 `tools` 产品能力隐式决定。
+_Avoid_：Agents 身份模式、`agents` 产品能力、Tools 设置
+
+**Agents 部署策略**：
+`agents` 身份模式对 Agents 部署地址的选择规则：`fixed` 由项目声明固定范围，`user-selectable` 允许用户选择部署；它不构成 `distributionId` 的身份。
+_Avoid_：项目身份模式、项目安装身份、Agents 部署
+
+**Core external compatibility marker**：
+Ki-Buddy 调用当前 Core external user/session contract 时使用的 `user_type=aionpro` wire value；当前 `agents` 模式使用该值，远期 `external` 模式也沿用该值，但它不表示项目用户属于 AionPro 或 Agents。
+_Avoid_：项目身份模式、AionPro 用户类型、第三方账户类型
+
+**外部身份 namespace**：
+远期 `external` 项目身份投影使用的稳定提供方与租户边界，由 `providerId` 及 issuer/tenant 共同标识；同一 `distributionId` 生命周期内保持不变。
+_Avoid_：username、角色名称、服务地址
+
 ## 产品与身份
 
 **AionUi 开源版**：
