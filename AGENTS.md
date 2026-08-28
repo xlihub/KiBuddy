@@ -168,7 +168,7 @@ Engineering skills must write or update documentation in Simplified Chinese. Kee
 
 ### Issue tracker
 
-Issues and specs are tracked in the GitHub repository `xlihub/Ki-Buddy`. See `docs/agents/issue-tracker.md`.
+Issues and specs are tracked in the GitHub repository `xlihub/KiBuddy`. See `docs/agents/issue-tracker.md`.
 
 ### Triage labels
 
