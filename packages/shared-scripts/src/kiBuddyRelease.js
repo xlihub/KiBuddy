@@ -8,7 +8,8 @@ const { readKiCorePin } = require('./kiCoreRelease');
 const productExperienceRegistry = require('../../desktop/src/common/platform/ki-buddy/experience/registry.json');
 
 const KI_BUDDY_PRODUCT = 'Ki-Buddy';
-const KI_BUDDY_REPOSITORY = 'xlihub/Ki-Buddy';
+const KI_BUDDY_SOURCE_REPOSITORY = 'xlihub/KiBuddy';
+const KI_BUDDY_HISTORICAL_PUBLIC_REPOSITORY = 'xlihub/Ki-Buddy';
 const AION_UI_REPOSITORY = 'iOfficeAI/AionUi';
 const PRODUCT_CONFIG_FILE = 'ki-buddy-product.json';
 const PRODUCT_EXPERIENCE_REGISTRY_FILE = 'packages/desktop/src/common/platform/ki-buddy/experience/registry.json';
@@ -98,6 +99,35 @@ function readJson(filePath, label) {
   }
 }
 
+function normalizeGitHubRepository(remoteUrl) {
+  const value = String(remoteUrl || '').trim();
+  const scpMatch = value.match(/^git@github\.com:([^/]+\/[^/]+?)(?:\.git)?$/);
+  if (scpMatch) return scpMatch[1];
+  try {
+    const url = new URL(value);
+    if (url.hostname !== 'github.com') return null;
+    return url.pathname.replace(/^\//, '').replace(/\.git$/, '') || null;
+  } catch {
+    return null;
+  }
+}
+
+function readOriginRepository(projectRoot) {
+  let remoteUrl;
+  try {
+    remoteUrl = execFileSync('git', ['remote', 'get-url', 'origin'], {
+      cwd: projectRoot,
+      encoding: 'utf8',
+      stdio: ['ignore', 'pipe', 'pipe'],
+    }).trim();
+  } catch (error) {
+    throw new Error('Cannot read the Ki-Buddy origin repository', { cause: error });
+  }
+  const repository = normalizeGitHubRepository(remoteUrl);
+  if (!repository) throw new Error('Ki-Buddy origin must be a GitHub repository');
+  return repository;
+}
+
 function requirePackageMetadataUrl(value, label, allowGitPrefix = false) {
   if (typeof value !== 'string' || value.trim() === '') {
     throw new Error(`${label} must be a non-empty URL`);
@@ -126,6 +156,9 @@ function readProductConfig(projectRoot) {
     [
       'schemaVersion',
       'runtimeIdentity',
+      'source',
+      'internalRelease',
+      'publicDistribution',
       'defaults',
       'experience',
       'locale',
@@ -141,9 +174,41 @@ function readProductConfig(projectRoot) {
     ],
     'Ki-Buddy product configuration'
   );
-  if (config.schemaVersion !== 3) throw new Error('Unsupported Ki-Buddy product configuration schema');
+  if (config.schemaVersion !== 4) throw new Error('Unsupported Ki-Buddy product configuration schema');
   if (typeof config.runtimeIdentity !== 'string' || config.runtimeIdentity.trim() === '') {
     throw new Error('Ki-Buddy runtime identity must be a non-empty string');
+  }
+  requireExactKeys(config.source, ['repository', 'url'], 'Ki-Buddy source');
+  if (
+    config.source.repository !== KI_BUDDY_SOURCE_REPOSITORY ||
+    config.source.url !== 'https://github.com/xlihub/KiBuddy'
+  ) {
+    throw new Error('Ki-Buddy source repository identity is invalid');
+  }
+  requireExactKeys(
+    config.internalRelease,
+    ['provider', 'repository', 'tagPrefix', 'releasePageUrl'],
+    'Ki-Buddy internal release'
+  );
+  if (
+    config.internalRelease.provider !== 'github' ||
+    config.internalRelease.repository !== KI_BUDDY_SOURCE_REPOSITORY ||
+    config.internalRelease.tagPrefix !== 'ki-buddy-v' ||
+    config.internalRelease.releasePageUrl !== 'https://github.com/xlihub/KiBuddy/releases'
+  ) {
+    throw new Error('Ki-Buddy internal release identity is invalid');
+  }
+  requireExactKeys(
+    config.publicDistribution,
+    ['provider', 'repository', 'releasePageUrl'],
+    'Ki-Buddy public distribution'
+  );
+  if (
+    config.publicDistribution.provider !== 'github' ||
+    config.publicDistribution.repository !== KI_BUDDY_HISTORICAL_PUBLIC_REPOSITORY ||
+    config.publicDistribution.releasePageUrl !== 'https://github.com/xlihub/Ki-Buddy/releases'
+  ) {
+    throw new Error('Ki-Buddy public distribution identity is invalid');
   }
   requireExactKeys(config.defaults, ['agentsBaseUrl', 'language'], 'Ki-Buddy product defaults');
   if (typeof config.defaults.agentsBaseUrl !== 'string' || config.defaults.agentsBaseUrl.trim() === '') {
@@ -204,6 +269,15 @@ function readProductConfig(projectRoot) {
       throw new Error(`Ki-Buddy brand link ${name} must be an absolute HTTP(S) URL`);
     }
   }
+  if (
+    config.brand.links.homepage !== config.source.url ||
+    config.brand.links.repository !== config.source.url ||
+    config.brand.links.releases !== config.publicDistribution.releasePageUrl ||
+    config.brand.links.support !== `${config.source.url}/issues` ||
+    config.brand.links.feedback !== `${config.source.url}/issues/new`
+  ) {
+    throw new Error('Ki-Buddy brand links do not match their configured sources');
+  }
   requireExactKeys(config.assets, ['platform', 'packaged', 'renderer'], 'Ki-Buddy assets');
   requireExactKeys(config.assets.platform, ['png', 'ico', 'icns'], 'Ki-Buddy platform assets');
   requireExactKeys(config.assets.packaged, ['icon'], 'Ki-Buddy packaged assets');
@@ -244,6 +318,13 @@ function readProductConfig(projectRoot) {
   requirePackageMetadataUrl(config.packageMetadata.homepage, 'Ki-Buddy package homepage');
   requireExactKeys(config.packageMetadata.bugs, ['url'], 'Ki-Buddy package bugs');
   requirePackageMetadataUrl(config.packageMetadata.bugs.url, 'Ki-Buddy package bugs URL');
+  if (
+    config.packageMetadata.repository.url !== `git+${config.source.url}.git` ||
+    config.packageMetadata.homepage !== `${config.source.url}#readme` ||
+    config.packageMetadata.bugs.url !== `${config.source.url}/issues`
+  ) {
+    throw new Error('Ki-Buddy package metadata does not match the source repository');
+  }
   if (config.runtimeIdentity !== config.packageMetadata.name) {
     throw new Error('Ki-Buddy runtime identity must match package metadata name');
   }
@@ -278,7 +359,8 @@ function readProductConfig(projectRoot) {
   );
   if (
     config.electronBuilder.publish?.provider !== 'github' ||
-    `${config.electronBuilder.publish?.owner}/${config.electronBuilder.publish?.repo}` !== KI_BUDDY_REPOSITORY ||
+    `${config.electronBuilder.publish?.owner}/${config.electronBuilder.publish?.repo}` !==
+      config.internalRelease.repository ||
     config.electronBuilder.publish?.tagNamePrefix !== 'ki-buddy-v'
   ) {
     throw new Error('Ki-Buddy electron-builder publish identity is invalid');
@@ -317,11 +399,18 @@ function readProductConfig(projectRoot) {
   );
   if (
     config.updates.provider !== 'github' ||
-    config.updates.repository !== KI_BUDDY_REPOSITORY ||
+    config.updates.repository !== KI_BUDDY_HISTORICAL_PUBLIC_REPOSITORY ||
     config.updates.tagPrefix !== 'ki-buddy-v' ||
     config.updates.releasePageUrl !== 'https://github.com/xlihub/Ki-Buddy/releases'
   ) {
     throw new Error('Ki-Buddy update configuration is invalid');
+  }
+  if (
+    config.updates.provider !== config.publicDistribution.provider ||
+    config.updates.repository !== config.publicDistribution.repository ||
+    config.updates.releasePageUrl !== config.publicDistribution.releasePageUrl
+  ) {
+    throw new Error('Ki-Buddy runtime update source must match the current public distribution source');
   }
   return config;
 }
@@ -387,14 +476,22 @@ function createKiBuddyBuildEvidence(projectRoot, outputPath, options = {}) {
   const sourceStateSha256 = options.sourceStateSha256 || createSourceStateSha256(projectRoot);
 
   const evidence = {
-    schemaVersion: 1,
+    schemaVersion: 2,
     product: {
       runtimeIdentity: productConfig.runtimeIdentity,
       productName: productConfig.brand.productName,
     },
-    sourceCommit,
-    sourceTreeDirty,
-    sourceStateSha256,
+    source: {
+      repository: productConfig.source.repository,
+      commit: sourceCommit,
+      treeDirty: sourceTreeDirty,
+      stateSha256: sourceStateSha256,
+    },
+    release: {
+      internal: { ...productConfig.internalRelease },
+      publicDistribution: { ...productConfig.publicDistribution },
+      runtimeUpdates: { ...productConfig.updates },
+    },
     policySources: {
       productConfig: {
         path: PRODUCT_CONFIG_FILE,
@@ -532,7 +629,7 @@ function readReleaseMapping(projectRoot, version) {
   const mapping = readJson(path.join(projectRoot, 'ki-buddy-release.json'), 'Ki-Buddy release mapping');
   requireExactKeys(mapping, ['schemaVersion', 'product', 'repository', 'release'], 'Ki-Buddy release mapping');
   if (mapping.schemaVersion !== 1) throw new Error('Unsupported Ki-Buddy release mapping schema');
-  if (mapping.product !== KI_BUDDY_PRODUCT || mapping.repository !== KI_BUDDY_REPOSITORY) {
+  if (mapping.product !== KI_BUDDY_PRODUCT || mapping.repository !== KI_BUDDY_SOURCE_REPOSITORY) {
     throw new Error('Ki-Buddy release mapping product identity is invalid');
   }
   const release = mapping.release;
@@ -649,18 +746,21 @@ function verifyUpstreamPackageJson(projectRoot, aionUi) {
 
 function readKiBuddyRelease(projectRoot, env = process.env) {
   const version = readProductVersion(projectRoot);
-  readProductConfig(projectRoot);
+  const productConfig = readProductConfig(projectRoot);
   const versionEntry = readReleaseMapping(projectRoot, version);
   validateCorePin(projectRoot, versionEntry);
   validateChangelog(projectRoot, version);
   const release = readReleaseContext(versionEntry, env);
   return {
     kiBuddy: {
-      repository: KI_BUDDY_REPOSITORY,
+      repository: productConfig.internalRelease.repository,
       version,
       tag: versionEntry.tag,
       releaseCommit: release.releaseCommit,
     },
+    kiBuddySource: { ...productConfig.source },
+    publicDistribution: { ...productConfig.publicDistribution },
+    runtimeUpdates: { ...productConfig.updates },
     aionUi: { ...versionEntry.aionUi },
     kiCore: {
       repository: versionEntry.kiCore.repository,
@@ -681,6 +781,10 @@ function verifyKiBuddyRelease(projectRoot, options = {}) {
   if (options.tag) env.KI_BUDDY_RELEASE_TAG = options.tag;
   if (options.commit) env.KI_BUDDY_RELEASE_COMMIT = options.commit;
   const identity = readKiBuddyRelease(projectRoot, env);
+  const repository = options.repository || (options.skipGit ? null : readOriginRepository(projectRoot));
+  if (repository && repository !== identity.kiBuddy.repository) {
+    throw new Error(`Ki-Buddy release repository must be ${identity.kiBuddy.repository}`);
+  }
   if (!options.skipGit) {
     verifyAionUiTag(projectRoot, { aionUi: identity.aionUi });
     verifyUpstreamPackageJson(projectRoot, identity.aionUi);
@@ -717,6 +821,7 @@ function runCli() {
   if (command === 'verify') {
     const identity = verifyKiBuddyRelease(projectRoot, {
       commit: options.commit,
+      repository: options.repository,
       skipGit: options['skip-git'] === 'true',
       tag: options.tag,
     });

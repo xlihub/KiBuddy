@@ -213,11 +213,19 @@ test.describe.serial('Ki-Buddy packaged first-release product matrix', () => {
 
     expect(appIdentity).toMatchObject({ isPackaged: true, name: 'Ki-Buddy' });
     expect(evidence).toMatchObject({
-      schemaVersion: 1,
+      schemaVersion: 2,
       product: { runtimeIdentity: 'ki-buddy', productName: 'Ki-Buddy' },
-      sourceCommit: currentSourceCommit(),
-      sourceStateSha256: currentSourceStateSha256(),
-      sourceTreeDirty: isSourceTreeDirty(),
+      source: {
+        repository: 'xlihub/KiBuddy',
+        commit: currentSourceCommit(),
+        stateSha256: currentSourceStateSha256(),
+        treeDirty: isSourceTreeDirty(),
+      },
+      release: {
+        internal: { repository: 'xlihub/KiBuddy' },
+        publicDistribution: { repository: 'xlihub/Ki-Buddy' },
+        runtimeUpdates: { repository: 'xlihub/Ki-Buddy' },
+      },
     });
     for (const source of Object.values(evidence.policySources)) {
       expect(source.sha256).toBe(sha256Source(source.path));

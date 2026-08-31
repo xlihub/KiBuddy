@@ -141,7 +141,7 @@ describe('collectBackendInstallDiagnostics', () => {
             schemaVersion: 3,
             version: FIXTURE_KI_BUDDY_VERSION,
             kiBuddy: {
-              repository: 'xlihub/Ki-Buddy',
+              repository: 'xlihub/KiBuddy',
               version: FIXTURE_KI_BUDDY_VERSION,
               tag: `ki-buddy-v${FIXTURE_KI_BUDDY_VERSION}`,
               releaseCommit: null,

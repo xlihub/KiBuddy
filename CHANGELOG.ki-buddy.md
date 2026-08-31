@@ -3,6 +3,22 @@
 本文件记录 Ki-Buddy 产品变化、AionUi 上游变化，以及每个版本固定的 Ki-Core/AionCore 来源。
 上游 AionUi 的原始变更记录继续保存在 [`CHANGELOG.md`](CHANGELOG.md)。
 
+## [0.1.8] - 2026-08-28
+
+### Ki-Buddy 定制变化
+
+- 将产品源码身份和内部 GitHub Release provenance 迁移到 private `xlihub/KiBuddy`，并与 historical public `xlihub/Ki-Buddy` 的公开分发和 runtime update source 分开配置。
+- 发布 preflight 和维护流程只接受 private 源码仓库；现有公开下载、Web CLI 安装脚本和应用内更新行为保持不变。
+
+### AionUi 上游更新
+
+- 继续基于 [AionUi v2.1.61](https://github.com/iOfficeAI/AionUi/releases/tag/v2.1.61)，commit `1afdf95c187f24198ab502a3c86cb2ef40bc3c6f`；本版本没有引入新的 AionUi 上游变化。
+
+### Ki-Core 更新
+
+- 继续固定 [Ki-Core 0.1.4](https://github.com/xlihub/Ki-Core/releases/tag/ki-core-v0.1.4)，release commit `3c4055eb65b7b9d1f2f80ce6008bdf1dae9469cc`。
+- Ki-Core 继续对应 [AionCore v0.1.72](https://github.com/iOfficeAI/AionCore/releases/tag/v0.1.72)，peeled commit `57a34cc1b1a3b17bcc023de06b9e6768fceac36f`。
+
 ## [0.1.7] - 2026-08-27
 
 ### Ki-Buddy 定制变化

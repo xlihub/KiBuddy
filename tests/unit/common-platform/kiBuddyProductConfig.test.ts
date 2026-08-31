@@ -6,8 +6,23 @@ import {
 } from '@/common/platform/ki-buddy';
 
 const validConfig = {
-  schemaVersion: 3,
+  schemaVersion: 4,
   runtimeIdentity: 'ki-buddy',
+  source: {
+    repository: 'xlihub/KiBuddy',
+    url: 'https://github.com/xlihub/KiBuddy',
+  },
+  internalRelease: {
+    provider: 'github',
+    repository: 'xlihub/KiBuddy',
+    tagPrefix: 'ki-buddy-v',
+    releasePageUrl: 'https://github.com/xlihub/KiBuddy/releases',
+  },
+  publicDistribution: {
+    provider: 'github',
+    repository: 'xlihub/Ki-Buddy',
+    releasePageUrl: 'https://github.com/xlihub/Ki-Buddy/releases',
+  },
   defaults: { agentsBaseUrl: 'https://agents.example.com', language: 'zh-CN' },
   electronBuilder: {
     appId: 'com.xlihub.ki-buddy',
@@ -27,11 +42,11 @@ const validConfig = {
     cliName: 'Ki CLI',
     description: 'AI agent desktop workspace',
     links: {
-      homepage: 'https://github.com/xlihub/Ki-Buddy',
-      repository: 'https://github.com/xlihub/Ki-Buddy',
+      homepage: 'https://github.com/xlihub/KiBuddy',
+      repository: 'https://github.com/xlihub/KiBuddy',
       releases: 'https://github.com/xlihub/Ki-Buddy/releases',
-      support: 'https://github.com/xlihub/Ki-Buddy/issues',
-      feedback: 'https://github.com/xlihub/Ki-Buddy/issues/new',
+      support: 'https://github.com/xlihub/KiBuddy/issues',
+      feedback: 'https://github.com/xlihub/KiBuddy/issues/new',
     },
   },
   assets: {
@@ -147,11 +162,15 @@ describe('Ki-Buddy product configuration', () => {
 
   it('exposes the validated brand and assets', () => {
     expect(parseKiBuddyProductConfig(validConfig)).toMatchObject({
-      schemaVersion: 3,
+      schemaVersion: 4,
       brand: {
         productName: 'Ki-Buddy',
         cliName: 'Ki CLI',
-        links: { support: 'https://github.com/xlihub/Ki-Buddy/issues' },
+        links: {
+          repository: 'https://github.com/xlihub/KiBuddy',
+          releases: 'https://github.com/xlihub/Ki-Buddy/releases',
+          support: 'https://github.com/xlihub/KiBuddy/issues',
+        },
       },
       assets: {
         packaged: { icon: 'ki-buddy/app.png' },
@@ -181,8 +200,26 @@ describe('Ki-Buddy product configuration', () => {
     expect(() => parseKiBuddyProductConfig({ ...validConfig, unexpected: true })).toThrow('unexpected unexpected');
   });
 
-  it('rejects schema v2 instead of migrating the product policy at runtime', () => {
-    expect(() => parseKiBuddyProductConfig({ ...validConfig, schemaVersion: 2 })).toThrow('schema');
+  it('rejects schema v3 instead of inferring the separated repository identities', () => {
+    expect(() => parseKiBuddyProductConfig({ ...validConfig, schemaVersion: 3 })).toThrow('schema');
+  });
+
+  it('rejects a source URL that does not match the source repository', () => {
+    expect(() =>
+      parseKiBuddyProductConfig({
+        ...validConfig,
+        source: { ...validConfig.source, url: 'https://github.com/xlihub/Ki-Buddy' },
+      })
+    ).toThrow('source URL');
+  });
+
+  it('does not make runtime startup depend on internal release metadata', () => {
+    expect(() =>
+      parseKiBuddyProductConfig({
+        ...validConfig,
+        internalRelease: { repository: 'invalid-runtime-irrelevant-value' },
+      })
+    ).not.toThrow();
   });
 
   it('rejects a runtime identity that conflicts with the Ki-Buddy package marker', () => {
@@ -271,7 +308,7 @@ describe('Ki-Buddy product configuration', () => {
     ).toThrow('brand link');
   });
 
-  it('rejects an update source that does not match the product repository', () => {
+  it('rejects an update source that does not match the public distribution source', () => {
     expect(() =>
       parseKiBuddyProductConfig({
         ...validConfig,

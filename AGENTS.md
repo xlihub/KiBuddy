@@ -155,7 +155,7 @@ When opening a PR, fill in the PR body using [.github/pull_request_template.md](
 | **testing**                | Testing workflow and quality standards                        | Writing tests, changing runtime behavior, fixing bugs, or claiming behavior is verified                |
 | **ki-release-maintenance** | Read-only Ki release status, candidate analysis, and recovery | Ki release status, upstream baseline planning, PR/run/tag recovery                                     |
 | **release-ki-core**        | 经确认执行 Ki-Core 同步、Release Please、tag 和发布监控       | 执行或恢复 `xlihub/Ki-Core` 上游同步与产品发布                                                         |
-| **release-ki-buddy**       | 经确认执行 Ki-Buddy 基准同步、版本、tag 和发布监控            | 执行或恢复 `xlihub/Ki-Buddy` 上游同步、版本准备与产品发布                                              |
+| **release-ki-buddy**       | 经确认执行 Ki-Buddy 基准同步、版本、tag 和发布监控            | 执行或恢复 private `xlihub/KiBuddy` 上游同步、版本准备与产品发布                                       |
 | **bump-version**           | Upstream AionUi-only version and release workflow             | Bumping `iOfficeAI/AionUi`; never Ki product repositories or `product/main`                            |
 
 > Skills are located in `.claude/skills/` and contain project conventions that apply to **all** agents and contributors.

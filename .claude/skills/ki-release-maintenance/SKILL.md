@@ -35,8 +35,9 @@ description: 只读检查 Ki-Buddy 与 Ki-Core 的发布状态、版本映射和
 
 1. 使用 `git rev-parse --show-toplevel` 找到当前 worktree，并读取 `git remote -v`。
 2. 规范化 SSH、HTTPS 和带 `.git` 后缀的 remote URL，以 `owner/repo` 作为仓库身份。只接受：
-   - `xlihub/Ki-Buddy`
+   - `xlihub/KiBuddy`
    - `xlihub/Ki-Core`
+     历史公开仓库 `xlihub/Ki-Buddy` 不属于当前源码仓库，只能作为 0.1.7 及更早版本的 tag、Release 和资产证据来源；不能选为 Ki-Buddy clone、PR、run 或 tag 的操作目标。
 3. 从当前仓库的父目录动态搜索有限深度内的 `.git` 目录或文件，并检查每个候选的 remote。也检查当前 clone 的 `git worktree list --porcelain` 结果。不要依赖固定本地路径，不要扫描整个主目录。
 4. 仅把 remote 匹配目标 `owner/repo` 的目录列为候选；目录名不能作为仓库身份依据。
 5. 对每个候选显示绝对路径、当前 branch、HEAD 和工作树是否有修改。
@@ -67,12 +68,13 @@ Ki-Buddy release/tag/commit
     └── AionCore tag/peeled commit
 ```
 
-分别读取映射中四个 tag 对应的 GitHub Release，确认 `isDraft`、`isPrerelease`、`publishedAt`、tag commit 和资产。Ki-Buddy 或 Ki-Core 的本地版本、产品配置、当前映射、历史映射与公开 Release 不一致时逐项列出，不选择新的发布基准。
+分别读取映射中四个 tag 对应的 GitHub Release，确认 `isDraft`、`isPrerelease`、`publishedAt`、tag commit 和资产。Ki-Buddy 使用 `ki-buddy-product.json` 声明的内部 Release；Ki-Core、AionUi 和 AionCore 使用各自的公开 Release。当前映射与对应 Release 不一致时逐项列出，不选择新的发布基准。
 
 报告必须区分：
 
 - 本地映射声明
-- GitHub 已公开事实
+- Ki-Buddy 内部 Release 状态
+- Ki-Core、AionUi、AionCore 的公开 Release 事实，以及 Ki-Buddy 历史公开分发证据
 - 无法验证的字段
 
 当前状态完成条件：Ki-Buddy、Ki-Core、AionUi、AionCore 四层版本和 commit 来源均有明确证据，或每个证据缺口均已标明。

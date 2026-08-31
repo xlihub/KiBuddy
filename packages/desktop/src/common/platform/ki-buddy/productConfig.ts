@@ -51,7 +51,16 @@ export type KiBuddyProductConfig = DeepReadonly<{
     namespace: string;
   };
   runtimeIdentity: typeof KI_BUDDY_PRODUCT_RUNTIME;
-  schemaVersion: 3;
+  publicDistribution: {
+    provider: 'github';
+    releasePageUrl: string;
+    repository: string;
+  };
+  schemaVersion: 4;
+  source: {
+    repository: string;
+    url: string;
+  };
   themes: {
     dark: string;
     light: string;
@@ -71,6 +80,9 @@ export type KiBuddyProductConfigLoadResult =
 const PRODUCT_CONFIG_TOP_LEVEL_KEYS = [
   'schemaVersion',
   'runtimeIdentity',
+  'source',
+  'internalRelease',
+  'publicDistribution',
   'defaults',
   'locale',
   'themes',
@@ -158,6 +170,18 @@ function requireHttpUrl(value: unknown, label: string): string {
   }
 }
 
+function repositoryPathFromUrl(url: string): string {
+  return new URL(url).pathname.replace(/^\//, '').replace(/\.git$/, '');
+}
+
+function requireRepository(value: unknown, label: string): string {
+  const repository = requireString(value, label);
+  if (!/^[^/\s]+\/[^/\s]+$/.test(repository)) {
+    throw new Error(`${label} must use owner/repo format`);
+  }
+  return repository;
+}
+
 /** Validates the runtime-owned subset of Ki-Buddy product configuration. */
 export function parseKiBuddyProductConfig(value: unknown): KiBuddyProductConfig {
   const config = requireRecord(value, 'Ki-Buddy product configuration');
@@ -166,6 +190,8 @@ export function parseKiBuddyProductConfig(value: unknown): KiBuddyProductConfig 
     [
       'schemaVersion',
       'runtimeIdentity',
+      'source',
+      'publicDistribution',
       'defaults',
       'locale',
       'themes',
@@ -178,11 +204,34 @@ export function parseKiBuddyProductConfig(value: unknown): KiBuddyProductConfig 
     PRODUCT_CONFIG_TOP_LEVEL_KEYS,
     'Ki-Buddy product configuration'
   );
-  if (config.schemaVersion !== 3) throw new Error('Unsupported Ki-Buddy product configuration schema');
+  if (config.schemaVersion !== 4) throw new Error('Unsupported Ki-Buddy product configuration schema');
   const runtimeIdentity = requireSupportedString(
     config.runtimeIdentity,
     KI_BUDDY_PRODUCT_RUNTIME,
     'Ki-Buddy runtime identity'
+  );
+  const source = requireRecord(config.source, 'Ki-Buddy source');
+  requireExactKeys(source, ['repository', 'url'], 'Ki-Buddy source');
+  const sourceRepository = requireRepository(source.repository, 'Ki-Buddy source repository');
+  const sourceUrl = requireHttpUrl(source.url, 'Ki-Buddy source URL');
+  const sourceUrlRepository = repositoryPathFromUrl(sourceUrl);
+  if (sourceUrlRepository !== sourceRepository) {
+    throw new Error('Ki-Buddy source URL must match the source repository');
+  }
+  const publicDistribution = requireRecord(config.publicDistribution, 'Ki-Buddy public distribution');
+  requireExactKeys(publicDistribution, ['provider', 'repository', 'releasePageUrl'], 'Ki-Buddy public distribution');
+  const publicDistributionProvider = requireSupportedString(
+    publicDistribution.provider,
+    'github',
+    'Ki-Buddy public distribution provider'
+  );
+  const publicDistributionRepository = requireRepository(
+    publicDistribution.repository,
+    'Ki-Buddy public distribution repository'
+  );
+  const publicDistributionReleasePageUrl = requireHttpUrl(
+    publicDistribution.releasePageUrl,
+    'Ki-Buddy public distribution release page'
   );
   const defaults = requireRecord(config.defaults, 'Ki-Buddy product defaults');
   requireExactKeys(defaults, ['agentsBaseUrl', 'language'], 'Ki-Buddy product defaults');
@@ -224,15 +273,30 @@ export function parseKiBuddyProductConfig(value: unknown): KiBuddyProductConfig 
   const updateTagPrefix = requireString(updates.tagPrefix, 'Ki-Buddy update tag prefix');
   const updateReleasePageUrl = requireHttpUrl(updates.releasePageUrl, 'Ki-Buddy update release page');
   const protocolScheme = requireProtocolScheme(electronBuilder.protocols);
-  const brandRepositoryPath = new URL(requireHttpUrl(links.repository, 'Ki-Buddy brand link repository')).pathname
-    .replace(/^\//, '')
-    .replace(/\.git$/, '');
-  if (updateProvider !== 'github' || updateRepository !== brandRepositoryPath) {
-    throw new Error('Ki-Buddy update source must match the configured GitHub repository');
+  const brandRepositoryUrl = requireHttpUrl(links.repository, 'Ki-Buddy brand link repository');
+  const brandRepositoryPath = repositoryPathFromUrl(brandRepositoryUrl);
+  if (brandRepositoryPath !== sourceRepository) {
+    throw new Error('Ki-Buddy brand repository must match the configured source repository');
+  }
+  if (
+    updateProvider !== publicDistributionProvider ||
+    updateRepository !== publicDistributionRepository ||
+    updateReleasePageUrl !== publicDistributionReleasePageUrl
+  ) {
+    throw new Error('Ki-Buddy update source must match the public distribution source');
   }
   return deepFreeze({
-    schemaVersion: 3,
+    schemaVersion: 4,
     runtimeIdentity,
+    source: {
+      repository: sourceRepository,
+      url: sourceUrl,
+    },
+    publicDistribution: {
+      provider: publicDistributionProvider,
+      repository: publicDistributionRepository,
+      releasePageUrl: publicDistributionReleasePageUrl,
+    },
     brand: {
       cliName: requireString(brand.cliName, 'Ki-Buddy CLI name'),
       productName: requireString(brand.productName, 'Ki-Buddy product name'),
@@ -240,7 +304,7 @@ export function parseKiBuddyProductConfig(value: unknown): KiBuddyProductConfig 
       description: requireString(brand.description, 'Ki-Buddy product description'),
       links: {
         homepage: requireHttpUrl(links.homepage, 'Ki-Buddy brand link homepage'),
-        repository: requireHttpUrl(links.repository, 'Ki-Buddy brand link repository'),
+        repository: brandRepositoryUrl,
         releases: requireHttpUrl(links.releases, 'Ki-Buddy brand link releases'),
         support: requireHttpUrl(links.support, 'Ki-Buddy brand link support'),
         feedback: requireHttpUrl(links.feedback, 'Ki-Buddy brand link feedback'),

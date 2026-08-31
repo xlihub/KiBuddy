@@ -46,6 +46,7 @@ jobs:
         run: |
           set -euo pipefail
           IDENTITY=$(node packages/shared-scripts/src/kiBuddyRelease.js verify --skip-git true \
+            --repository "$GITHUB_REPOSITORY" \
             --tag "$GITHUB_REF_NAME" \
             --commit "$GITHUB_SHA")
           AIONUI_REPOSITORY=$(jq -r '.aionUi.repository' <<< "$IDENTITY")
@@ -66,6 +67,7 @@ jobs:
             exit 1
           fi
           node packages/shared-scripts/src/kiBuddyRelease.js verify \
+            --repository "$GITHUB_REPOSITORY" \
             --tag "$GITHUB_REF_NAME" \
             --commit "$GITHUB_SHA"
           echo "version=$VERSION" >> "$GITHUB_OUTPUT"

@@ -32,6 +32,37 @@ function workflowStep(content: string, name: string): string {
 }
 
 describe('release packaging configuration', () => {
+  it.each([
+    ['build-and-release.yml', 'Fetch mapped AionUi tag'],
+    ['build-and-release.yml', 'Validate tag, mapping and upstream package'],
+    ['pr-checks.yml', 'Fetch mapped AionUi tag'],
+    ['pr-checks.yml', 'Validate Ki-Buddy product release mapping'],
+  ])('binds %s / %s preflight to the current GitHub repository', (workflowName, stepName) => {
+    const workflow = readProjectFile(`.github/workflows/${workflowName}`);
+    const step = workflowStep(workflow, stepName);
+
+    expect(step).toContain('kiBuddyRelease.js verify');
+    expect(step).toContain('--repository "$GITHUB_REPOSITORY"');
+  });
+
+  it('keeps Manual Build on the reusable release-pinned or candidate Ki-Core pipeline', () => {
+    const workflow = readProjectFile('.github/workflows/build-manual.yml');
+
+    expect(workflow).toContain('          - release-pinned\n          - candidate');
+    expect(workflow).toContain('uses: ./.github/workflows/_build-reusable.yml');
+    expect(workflow).toContain('ki_core_source_policy: ${{ inputs.ki_core_source_policy }}');
+  });
+
+  it('keeps the Web CLI installer on the historical public distribution source', () => {
+    const installer = readProjectFile('scripts/install-web.sh');
+
+    expect(installer).toContain(
+      'https://raw.githubusercontent.com/xlihub/Ki-Buddy/product/main/scripts/install-web.sh'
+    );
+    expect(installer).toContain('MIRROR="${MIRROR:-https://github.com/xlihub/Ki-Buddy/releases/download}"');
+    expect(installer).toContain('https://api.github.com/repos/xlihub/Ki-Buddy/releases/latest');
+  });
+
   it('keeps mac zip artifacts enabled', () => {
     const config = readProjectFile('packages/desktop/electron-builder.yml');
     const macBlock = yamlBlock(config, 'mac');

@@ -17,7 +17,7 @@ Ki-Buddy 打包只允许三种显式来源策略：
 根 `package.json` 必须与 `ki-buddy-release.json` 中映射的 AionUi commit 完全一致，不保存 Ki-Buddy 版本、名称或 Core pin。这样同步上游时不需要反复解决产品字段冲突。
 
 - `ki-buddy-version.txt`：当前 Ki-Buddy SemVer。
-- `ki-buddy-product.json`：包名、桌面应用身份、协议、Web CLI 身份和 Ki-Core pin。
+- `ki-buddy-product.json`：分别声明 private 源码仓库、private 内部 Release、historical public 分发源、runtime update source，以及包名、桌面应用身份、协议、Web CLI 身份和 Ki-Core pin。
 - `ki-buddy-release.json`：当前 Ki-Buddy → AionUi → Ki-Core → AionCore 的发布映射；历史映射保存在不可变产品 tag、CHANGELOG 和 Release provenance 中。
 - `CHANGELOG.ki-buddy.md`：Ki-Buddy 产品 Release Notes 来源。
 - `packages/shared-scripts/src/kiBuddyRelease.js`：生成最终 package metadata 和 electron-builder overlay，并校验上述文件的一致性。
@@ -26,9 +26,9 @@ Ki-Buddy 打包只允许三种显式来源策略：
 
 ## Ki-Buddy 正式发布
 
-`build-and-release.yml` 只响应 `ki-buddy-v*` tag。它先从已经通过结构校验的当前版本映射读取 AionUi 仓库和 tag，直接获取该上游 tag，再校验 tag commit、上游 `package.json` 和 `product/main` 来源；Ki-Buddy origin 不需要镜像 AionUi tag。随后执行代码质量、六平台桌面构建及 Web CLI 构建。所有构建成功后，发布任务进入 `ki-buddy-stable` Environment；审批通过后只创建 Draft Release，由维护者检查并手工公开。
+`build-and-release.yml` 只响应 private `xlihub/KiBuddy` 中的 `ki-buddy-v*` tag。preflight 使用 `github.repository` 验证当前源码仓库，拒绝 historical public `xlihub/Ki-Buddy` 和其他仓库。它从已经通过结构校验的当前版本映射读取 AionUi 仓库和 tag，直接获取该上游 tag，再校验 tag commit、上游 `package.json` 和 `product/main` 来源；Ki-Buddy origin 不需要镜像 AionUi tag。随后执行代码质量、六平台桌面构建及 Web CLI 构建。所有构建成功后，发布任务进入 `ki-buddy-stable` Environment；审批通过后在 private 仓库创建内部 Draft Release，由维护者检查并手工发布为内部 Release。
 
-应用内更新默认直接读取 `xlihub/Ki-Buddy` GitHub Releases，并理解 `ki-buddy-v` tag 前缀。`release-distribute.yml` 的外部分发由独立变量 `KI_ENABLE_RELEASE_DISTRIBUTION` 控制；未配置 Ki-Buddy 自己的 S3/OIDC 目标前应保持关闭，防止复用 AionUi 的发布目标。
+应用内更新和 Web CLI 安装脚本继续读取 historical public `xlihub/Ki-Buddy` GitHub Releases，并理解 `ki-buddy-v` tag 前缀；它们与 private 内部 Release 是两个独立来源。`release-distribute.yml` 的外部分发由独立变量 `KI_ENABLE_RELEASE_DISTRIBUTION` 控制；未配置 Ki-Buddy 自己的 S3/OIDC 目标前应保持关闭，防止复用 AionUi 的发布目标。
 
 正式桌面包与 Web CLI workflow 同时固定 `BUN_INSTALL_REGISTRY` 和 `npm_config_registry` 到 npm 官方 registry。后者用于 Ki-Core 的 `prepare-managed-resources` 安装 Codex、Claude 等平台包，避免 runner 用户级 `.npmrc` 改变正式构建来源。
 

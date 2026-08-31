@@ -89,7 +89,8 @@ jobs:
         shell: bash
         run: |
           set -euo pipefail
-          IDENTITY=$(node packages/shared-scripts/src/kiBuddyRelease.js verify --skip-git true)
+          IDENTITY=$(node packages/shared-scripts/src/kiBuddyRelease.js verify --skip-git true \
+            --repository "$GITHUB_REPOSITORY")
           AIONUI_REPOSITORY=$(jq -r '.aionUi.repository' <<< "$IDENTITY")
           AIONUI_TAG=$(jq -r '.aionUi.tag' <<< "$IDENTITY")
           git fetch --force --no-tags \
@@ -97,7 +98,7 @@ jobs:
             "refs/tags/${AIONUI_TAG}:refs/tags/${AIONUI_TAG}"
 
       - name: Validate Ki-Buddy product release mapping
-        run: node packages/shared-scripts/src/kiBuddyRelease.js verify
+        run: node packages/shared-scripts/src/kiBuddyRelease.js verify --repository "$GITHUB_REPOSITORY"
 
   # Job 2: Unit tests across all platforms
   unit-tests:

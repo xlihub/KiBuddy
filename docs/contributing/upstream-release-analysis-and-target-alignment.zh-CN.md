@@ -1,8 +1,10 @@
 # 上游发版流程分析与 Ki 双仓目标流程
 
-> 最近核对时间：2026-08-07
-> 适用仓库：`xlihub/Ki-Buddy`、`xlihub/Ki-Core`
+> 最近核对时间：2026-08-28
+> 适用仓库：private `xlihub/KiBuddy`、public `xlihub/Ki-Core`
 > 上游仓库：`iOfficeAI/AionUi`、`iOfficeAI/AionCore`
+
+historical public `xlihub/Ki-Buddy` 保留 0.1.7 及更早版本的源码、tag、Release 和资产证据，不再承担当前 Ki-Buddy 源码或内部 Release。
 
 本文面向后续参与双仓维护的开发者。读完后，读者应当能够判断一项发版相关改动属于上游同步、Ki 产品版本管理，还是不必要的发布基础设施，并能按本文描述实现后续流程。
 
@@ -307,7 +309,7 @@ Ki-Buddy 短期会进行二次开发，因此需要同时管理上游变化、�
 
 AionUi 或 Ki-Core 的新 Release 只进入候选列表，不自动创建同步 PR 或 Ki-Buddy 版本准备 PR。管理员准备 Ki-Buddy 版本时分别选择 AionUi 发布基准和 Ki-Core pin；两者都可以保持不变。
 
-选择新的发布基准后，先创建独立同步 PR；同步合并并验证后，再准备 Ki-Buddy 产品版本。自动化不得直接决定发布基准或公开 Ki-Buddy。
+选择新的发布基准后，先创建独立同步 PR；同步合并并验证后，再准备 Ki-Buddy 产品版本。自动化不得直接决定发布基准或将 Ki-Buddy Draft 发布为内部 Release。
 
 ### 7.4 正式构建和人工发布边界
 
@@ -318,7 +320,7 @@ AionUi 或 Ki-Core 的新 Release 只进入候选列表，不自动创建同步 
 3. 运行代码质量检查、六个平台桌面构建、五个平台 Web CLI 构建和安装冒烟测试。
 4. 所有构建完成后请求 `ki-buddy-stable` Environment 审批。
 5. 审批后汇总安装包、Web CLI、checksums、updater metadata、安装脚本和 Release Notes，创建 Draft Release。
-6. `xlihub` 检查 Draft 后手工公开发布。
+6. `xlihub` 检查 Draft 后手工发布为内部 Release。
 
 第一次成功运行中，Windows ARM64 桌面构建约 25 分钟，是最慢的平台；整条 workflow 还包含审批等待和资产汇总。单个平台运行时间较长不等于 workflow 卡死，不应仅因耗时删除 required checks。
 
@@ -376,6 +378,6 @@ Ki-Buddy 部分已经完成：
 
 - Ki-Core Rust 源码、API、协议和数据库迁移的二次开发。
 - 自动合并上游同步 PR。
-- 自动公开发布 Ki-Core 或 Ki-Buddy。
-- 覆盖、移动或删除已经公开的产品 tag。
+- 自动发布 Ki-Core 公开 Release 或 Ki-Buddy 内部 Release。
+- 覆盖、移动或删除任何已存在的产品 tag。
 - 为了同步上游而重写整个 AionUi/AionCore workflow 体系。
