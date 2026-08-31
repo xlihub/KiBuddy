@@ -136,6 +136,10 @@ _Avoid_：产品体验策略、服务端授权、角色名称
 项目分发版本是否启用 Agents catalog、远端调用和 Agents MCP Adapter 的独立集成选择；它不由项目身份模式或 `tools` 产品能力隐式决定。
 _Avoid_：Agents 身份模式、`agents` 产品能力、Tools 设置
 
+**本地 Agent 管理**：
+Ki-Buddy 对本机 CLI Agent 的发现、配置和使用能力，由 `agents` 产品能力控制；它独立于 Agents Gateway 集成，项目不接入 Agents 平台时仍可启用。
+_Avoid_：Agents 平台配置、Agents Gateway 集成、Agents 执行助手
+
 **Agents 部署策略**：
 `agents` 身份模式对 Agents 部署地址的选择规则：`fixed` 由项目声明固定范围，`user-selectable` 允许用户选择部署；它不构成 `distributionId` 的身份。
 _Avoid_：项目身份模式、项目安装身份、Agents 部署

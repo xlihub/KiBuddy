@@ -93,6 +93,24 @@ describe('projectProductAssistantCatalog', () => {
     expect(catalog.hiddenResources.every(({ code }) => code === 'product_resource_hidden')).toBe(true);
   });
 
+  it('hides the Agents execution Assistant when the Agents Gateway integration is unavailable', () => {
+    const agentsExecution = KI_BUDDY_PRODUCT_RESOURCE_REGISTRY.assistant.agentsExecution;
+    const word = KI_BUDDY_PRODUCT_RESOURCE_REGISTRY.assistant.word;
+    const catalog = projectProductAssistantCatalog(
+      [
+        assistant({ id: agentsExecution.id, source: agentsExecution.source }),
+        assistant({ id: word.id, source: word.source }),
+      ],
+      kiBuddyExperience(),
+      []
+    );
+
+    expect(catalog.visibleAssistants.map(({ id }) => id)).toEqual([word.id]);
+    expect(catalog.hiddenResources).toContainEqual(
+      expect.objectContaining({ resourceId: agentsExecution.id, origin: 'productBuiltin' })
+    );
+  });
+
   it('keeps every Assistant visible and manageable in AionUi', () => {
     const candidates = [
       assistant({ id: 'word-creator', source: 'builtin' }),

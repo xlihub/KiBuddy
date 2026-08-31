@@ -18,7 +18,9 @@ describe('Windows fast build scripts', () => {
 
   it('supports a temporary build-time auto-update version override', () => {
     expect(buildScript).toContain("DEBUG_AUTO_UPDATE_CURRENT_VERSION_ENV = 'AIONUI_DEBUG_AUTO_UPDATE_CURRENT_VERSION'");
-    expect(buildScript).toContain('const buildVersionOverride = getBuildVersionOverride()');
+    expect(buildScript).toContain(
+      'const buildVersionOverride = projectBuildPlan?.version ?? getBuildVersionOverride()'
+    );
     expect(buildScript).toContain('createElectronBuilderConfig(projectRoot, builderConfigPath,');
     expect(buildScript).not.toContain('packageJson.version = debugAutoUpdateCurrentVersion');
     expect(buildScript).not.toContain('restorePackageVersionOverride');

@@ -10,6 +10,7 @@ import { getBaseUrl, isBackendHttpError } from '@/common/adapter/httpBridge';
 import WebviewHost from '@/renderer/components/media/WebviewHost';
 import { openExternalUrl } from '@/renderer/utils/platform';
 import { isElectronDesktop } from '@/renderer/utils/platform';
+import { getProductGitHubResourceUrl } from '@/renderer/services/runtime/productBrandRuntime';
 import { Button, Spin } from '@arco-design/web-react';
 import React, { useEffect, useRef, useState } from 'react';
 import { useTranslation } from 'react-i18next';
@@ -71,6 +72,29 @@ const OFFICE_ERROR_I18N_KEYS: Record<OfficeWatchErrorCode, string> = {
 };
 
 export const OFFICECLI_INSTALL_URL = 'https://github.com/iOfficeAI/OfficeCLI/releases';
+
+/** Resolves the OfficeCLI releases page through product GitHub-resource policy. */
+export function getOfficeCliInstallUrl(): string | null {
+  return getProductGitHubResourceUrl(OFFICECLI_INSTALL_URL);
+}
+
+/** Product-gated OfficeCLI installation action shown by desktop preview errors. */
+export const OfficeCliInstallLink: React.FC<{ label: string }> = ({ label }) => {
+  const installUrl = getOfficeCliInstallUrl();
+  if (!installUrl) return null;
+  return (
+    <div className='flex justify-center'>
+      <Button
+        data-testid='officecli-install-link'
+        type='text'
+        size='small'
+        onClick={() => void openExternalUrl(installUrl)}
+      >
+        {label}
+      </Button>
+    </div>
+  );
+};
 
 interface OfficeWatchViewerProps {
   docType: DocType;
@@ -282,13 +306,7 @@ const OfficeWatchViewer: React.FC<OfficeWatchViewerProps> = ({ docType, fileRef,
               <div className='text-12px text-t-secondary mt-8px'>{t('preview.office.serverInstall.icuNote')}</div>
             </div>
           )}
-          {showInstallLink && (
-            <div className='flex justify-center'>
-              <Button type='text' size='small' onClick={() => void openExternalUrl(OFFICECLI_INSTALL_URL)}>
-                {t('preview.office.installLinkText')}
-              </Button>
-            </div>
-          )}
+          {showInstallLink ? <OfficeCliInstallLink label={t('preview.office.installLinkText')} /> : null}
           {showRetry && (
             <div className='flex justify-center'>
               <Button size='small' type='primary' onClick={() => setRetryKey((value) => value + 1)}>

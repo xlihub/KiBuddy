@@ -1,13 +1,18 @@
-import type { KiBuddyProductConfig } from '@/common/platform/ki-buddy/productConfig';
+import type {
+  KiBuddyDistributionIdentityMode,
+  KiBuddyProductConfig,
+  KiBuddyProductIntegration,
+} from '@/common/platform/ki-buddy/productConfig';
 import type { DeepReadonly } from '@/common/platform/ki-buddy/experience';
 
 export type KiBuddyProductCapability = DeepReadonly<{
   assets: KiBuddyProductConfig['assets']['renderer'];
   brand: KiBuddyProductConfig['brand'];
   id: 'ki-buddy';
+  integrations: readonly KiBuddyProductIntegration[];
   experience: KiBuddyProductConfig['experience'];
   locale: KiBuddyProductConfig['locale'];
-  schemaVersion: 3;
+  schemaVersion: 4;
   themes: KiBuddyProductConfig['themes'];
 }>;
 
@@ -17,6 +22,7 @@ export type KiBuddyProductBootstrap =
   | Readonly<{
       capability: KiBuddyProductCapability;
       error: null;
+      identityMode: KiBuddyDistributionIdentityMode;
       productIdentity: 'ki-buddy';
       status: 'ready';
     }>;

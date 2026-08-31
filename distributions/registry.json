@@ -1,0 +1,34 @@
+{
+  "schemaVersion": 1,
+  "registrations": [
+    {
+      "distributionId": "zxjt",
+      "lifecycle": "active",
+      "identityMode": "local",
+      "identities": {
+        "formal": {
+          "appId": "com.xlihub.ki-buddy.zxjt",
+          "applicationName": "Ki-Buddy",
+          "executableName": "Ki-Buddy-ZXJT",
+          "protocolScheme": "ki-buddy-zxjt",
+          "dataDirectory": "Ki-Buddy-ZXJT",
+          "credentialNamespace": "ki-buddy-zxjt"
+        },
+        "preview": {
+          "appId": "com.xlihub.ki-buddy.zxjt.preview",
+          "applicationName": "Ki-Buddy",
+          "executableName": "Ki-Buddy-ZXJT-Preview",
+          "protocolScheme": "ki-buddy-zxjt-preview",
+          "dataDirectory": "Ki-Buddy-ZXJT-Preview",
+          "credentialNamespace": "ki-buddy-zxjt-preview"
+        }
+      },
+      "allowed": {
+        "platforms": ["macos-arm64"],
+        "integrations": [],
+        "disabledFeatures": ["account", "about", "feedback", "githubResources"],
+        "nonSensitiveConfigKeys": []
+      }
+    }
+  ]
+}

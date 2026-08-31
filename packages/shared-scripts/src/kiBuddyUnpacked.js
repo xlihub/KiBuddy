@@ -32,7 +32,7 @@ function requireRelativePath(value, label) {
   return value;
 }
 
-function resolveManagedNode(resourcesDir, platform, bundledAionCorePath) {
+function resolveBundledRuntime(resourcesDir, platform, bundledAionCorePath) {
   const bundledRoot = path.join(resourcesDir, bundledAionCorePath);
   const runtimeDirectories = fs
     .readdirSync(bundledRoot, { withFileTypes: true })
@@ -40,7 +40,11 @@ function resolveManagedNode(resourcesDir, platform, bundledAionCorePath) {
   if (runtimeDirectories.length !== 1) {
     throw new Error(`Expected one ${platform} bundled AionCore runtime in ${bundledRoot}`);
   }
-  const managedResourcesDir = path.join(bundledRoot, runtimeDirectories[0].name, 'managed-resources');
+  return path.join(bundledRoot, runtimeDirectories[0].name);
+}
+
+function resolveManagedNode(runtimeDirectory, platform) {
+  const managedResourcesDir = path.join(runtimeDirectory, 'managed-resources');
   const manifestPath = requireFile(
     path.join(managedResourcesDir, 'manifest.json'),
     `${platform} managed Node manifest`
@@ -57,6 +61,34 @@ function resolveManagedNode(resourcesDir, platform, bundledAionCorePath) {
   const nodeRoot = requireRelativePath(manifest.node.root, `${platform} managed Node root`);
   const nodeExecutable = requireRelativePath(manifest.node.executable, `${platform} managed Node executable`);
   return requireFile(path.join(managedResourcesDir, nodeRoot, nodeExecutable), `${platform} managed Node executable`);
+}
+
+function verifyKiCoreProvenance(runtimeDirectory, platform, expectedBuildPlan) {
+  if (!expectedBuildPlan || platform !== 'darwin') return;
+  const expectedRuntimeKey =
+    expectedBuildPlan.kiCore.platform === 'macos-arm64' ? 'darwin-arm64' : expectedBuildPlan.kiCore.platform;
+  if (path.basename(runtimeDirectory) !== expectedRuntimeKey) {
+    throw new Error('Bundled Ki-Core runtime target does not match the resolved build plan');
+  }
+  const manifestPath = requireFile(path.join(runtimeDirectory, 'manifest.json'), 'Bundled Ki-Core manifest');
+  let manifest;
+  try {
+    manifest = JSON.parse(fs.readFileSync(manifestPath, 'utf8'));
+  } catch {
+    throw new Error('Bundled Ki-Core manifest is invalid JSON');
+  }
+  if (
+    manifest?.platform !== 'darwin' ||
+    manifest?.arch !== 'arm64' ||
+    manifest?.source?.policy !== 'release-pinned' ||
+    manifest?.source?.repository !== expectedBuildPlan.kiCore.repository ||
+    manifest?.source?.tag !== expectedBuildPlan.kiCore.tag ||
+    manifest?.kiCore?.tag !== expectedBuildPlan.kiCore.tag ||
+    manifest?.kiCore?.releaseCommit !== expectedBuildPlan.kiCore.commit ||
+    !isDeepStrictEqual(manifest?.aionCore, expectedBuildPlan.kiCore.aionCore)
+  ) {
+    throw new Error('Bundled Ki-Core provenance does not match the resolved build plan');
+  }
 }
 
 function resolveMacApp(inputPath, productName) {
@@ -87,6 +119,9 @@ function readWindowsProductName(executablePath) {
 
 function verifyMacIdentity(appPath, packagingIdentity) {
   const info = readMacInfoPlist(requireFile(path.join(appPath, 'Contents', 'Info.plist'), 'macOS Info.plist'));
+  if (info.CFBundleIdentifier !== packagingIdentity.desktop.appId) {
+    throw new Error('macOS CFBundleIdentifier does not match the expected application identity');
+  }
   if (info.CFBundleDisplayName !== packagingIdentity.desktop.productName) {
     throw new Error('macOS CFBundleDisplayName does not match the expected product name');
   }
@@ -100,7 +135,27 @@ function verifyMacIdentity(appPath, packagingIdentity) {
   }
 }
 
-function verifyBuildEvidence(resourcesDir, packagingIdentity, expectsPackagingIdentity) {
+function toDistributionEvidence(buildPlan) {
+  return {
+    schemaVersion: buildPlan.schemaVersion,
+    distributionId: buildPlan.distributionId,
+    mode: buildPlan.mode,
+    version: buildPlan.version,
+    identityMode: buildPlan.identityMode,
+    source: buildPlan.source,
+    registration: buildPlan.registration,
+    manifest: buildPlan.manifest,
+    baseline: buildPlan.baseline,
+    platforms: buildPlan.platforms,
+    integrations: buildPlan.integrations,
+    disabledFeatures: buildPlan.disabledFeatures,
+    runtimeIdentity: buildPlan.runtimeIdentity,
+    kiCore: buildPlan.kiCore,
+    secretScope: buildPlan.secretScope,
+  };
+}
+
+function verifyBuildEvidence(resourcesDir, packagingIdentity, expectsPackagingIdentity, expectedBuildPlan) {
   const evidencePath = requireFile(
     path.join(resourcesDir, packagingIdentity.resources.packaged.buildEvidence),
     'Packaging build evidence'
@@ -124,11 +179,28 @@ function verifyBuildEvidence(resourcesDir, packagingIdentity, expectsPackagingId
   if (evidence.packagingIdentity && !isDeepStrictEqual(evidence.packagingIdentity, packagingIdentity)) {
     throw new Error('Packaging build evidence resolved identity does not match the expected identity');
   }
+  if (expectedBuildPlan && !isDeepStrictEqual(evidence.distribution, toDistributionEvidence(expectedBuildPlan))) {
+    throw new Error('Packaging build evidence distribution does not match the resolved build plan');
+  }
+  if (
+    expectedBuildPlan &&
+    (evidence.source?.repository !== expectedBuildPlan.source.repository ||
+      evidence.source?.commit !== expectedBuildPlan.source.commit ||
+      evidence.source?.treeDirty !== false)
+  ) {
+    throw new Error('Project packaging build evidence must identify the clean committed source from the build plan');
+  }
   return evidencePath;
 }
 
 /** Verifies product identity in an electron-builder unpacked output. */
-function verifyKiBuddyUnpacked(projectRoot, unpackedPath, platform = process.platform, expectedIdentity) {
+function verifyKiBuddyUnpacked(
+  projectRoot,
+  unpackedPath,
+  platform = process.platform,
+  expectedIdentity,
+  expectedBuildPlan
+) {
   const productConfig = readProductConfig(projectRoot);
   const expectsPackagingIdentity = expectedIdentity !== undefined;
   const packagingIdentity = resolveKiBuddyPackagingIdentity(productConfig, expectedIdentity);
@@ -167,12 +239,19 @@ function verifyKiBuddyUnpacked(projectRoot, unpackedPath, platform = process.pla
     path.join(resourcesDir, packagingIdentity.resources.packaged.agentsMcpAdapter),
     `${platform} Agents MCP Adapter`
   );
-  const managedNodePath = resolveManagedNode(
+  const bundledRuntimeDirectory = resolveBundledRuntime(
     resourcesDir,
     platform,
     packagingIdentity.resources.packaged.bundledAionCore
   );
-  const buildEvidencePath = verifyBuildEvidence(resourcesDir, packagingIdentity, expectsPackagingIdentity);
+  verifyKiCoreProvenance(bundledRuntimeDirectory, platform, expectedBuildPlan);
+  const managedNodePath = resolveManagedNode(bundledRuntimeDirectory, platform);
+  const buildEvidencePath = verifyBuildEvidence(
+    resourcesDir,
+    packagingIdentity,
+    expectsPackagingIdentity,
+    expectedBuildPlan
+  );
 
   if (platform === 'win32' && readWindowsProductName(executablePath) !== packagingIdentity.desktop.productName) {
     throw new Error('Windows executable ProductName does not match the expected product name');

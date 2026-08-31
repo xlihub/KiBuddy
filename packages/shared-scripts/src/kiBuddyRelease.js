@@ -505,6 +505,27 @@ function createKiBuddyBuildEvidence(projectRoot, outputPath, options = {}) {
         sha256: sha256File(path.join(projectRoot, PRODUCT_EXPERIENCE_REGISTRY_FILE)),
       },
     },
+    ...(options.distributionBuildPlan
+      ? {
+          distribution: {
+            schemaVersion: options.distributionBuildPlan.schemaVersion,
+            distributionId: options.distributionBuildPlan.distributionId,
+            mode: options.distributionBuildPlan.mode,
+            version: options.distributionBuildPlan.version,
+            identityMode: options.distributionBuildPlan.identityMode,
+            source: options.distributionBuildPlan.source,
+            registration: options.distributionBuildPlan.registration,
+            manifest: options.distributionBuildPlan.manifest,
+            baseline: options.distributionBuildPlan.baseline,
+            platforms: options.distributionBuildPlan.platforms,
+            integrations: options.distributionBuildPlan.integrations,
+            disabledFeatures: options.distributionBuildPlan.disabledFeatures,
+            runtimeIdentity: options.distributionBuildPlan.runtimeIdentity,
+            kiCore: options.distributionBuildPlan.kiCore,
+            secretScope: options.distributionBuildPlan.secretScope,
+          },
+        }
+      : {}),
   };
 
   fs.mkdirSync(path.dirname(outputPath), { recursive: true });
@@ -536,7 +557,7 @@ function createEffectivePackageJson(projectRoot, options = {}) {
  * Writes the electron-builder configuration and evidence for one resolved Ki-Buddy packaging identity.
  * @param {string} projectRoot Repository root containing product and upstream builder configuration.
  * @param {string} outputPath Destination for the generated electron-builder JSON configuration.
- * @param {{ commit?: string, packagingOverlay?: object, version?: string }} [options] Packaging inputs.
+ * @param {{ commit?: string, distributionBuildPlan?: object, packagingOverlay?: object, version?: string }} [options] Packaging inputs.
  * @returns {object} Generated electron-builder configuration.
  */
 function createElectronBuilderConfig(projectRoot, outputPath, options = {}) {
@@ -559,6 +580,9 @@ function createElectronBuilderConfig(projectRoot, outputPath, options = {}) {
   const upstreamExtraResources = Array.isArray(upstreamBuilderConfig.extraResources)
     ? upstreamBuilderConfig.extraResources
     : [];
+  const projectArtifactName = options.distributionBuildPlan
+    ? `${effectivePackage.name}-\${version}-\${os}-\${arch}.\${ext}`
+    : null;
   const defaultIdentity = resolveKiBuddyPackagingIdentity(productConfig);
   const productExtraResources = upstreamExtraResources.map((resource) => {
     if (!resource || typeof resource !== 'object') return resource;
@@ -579,6 +603,7 @@ function createElectronBuilderConfig(projectRoot, outputPath, options = {}) {
   const buildEvidencePath = path.join(path.dirname(outputPath), packagingIdentity.resources.packaged.buildEvidence);
   createKiBuddyBuildEvidence(projectRoot, buildEvidencePath, {
     commit: options.commit,
+    ...(options.distributionBuildPlan ? { distributionBuildPlan: options.distributionBuildPlan } : {}),
     ...(options.packagingOverlay ? { packagingOverlay: packagingIdentity } : {}),
   });
   productExtraResources.push({
@@ -588,12 +613,25 @@ function createElectronBuilderConfig(projectRoot, outputPath, options = {}) {
   const config = {
     ...upstreamBuilderConfig,
     ...packagingIdentity.desktop,
-    win: { ...upstreamBuilderConfig.win, icon: packagingIdentity.resources.platform.ico },
-    mac: { ...upstreamBuilderConfig.mac, icon: packagingIdentity.resources.platform.icns },
+    win: {
+      ...upstreamBuilderConfig.win,
+      icon: packagingIdentity.resources.platform.ico,
+      ...(projectArtifactName ? { artifactName: projectArtifactName } : {}),
+    },
+    nsis: {
+      ...upstreamBuilderConfig.nsis,
+      ...(projectArtifactName ? { artifactName: projectArtifactName } : {}),
+    },
+    mac: {
+      ...upstreamBuilderConfig.mac,
+      icon: packagingIdentity.resources.platform.icns,
+      ...(projectArtifactName ? { artifactName: projectArtifactName } : {}),
+    },
     linux: {
       ...upstreamBuilderConfig.linux,
       ...packagingIdentity.desktop.linux,
       icon: packagingIdentity.resources.platform.png,
+      ...(projectArtifactName ? { artifactName: projectArtifactName } : {}),
     },
     extraResources: productExtraResources,
     extraMetadata: Object.fromEntries(

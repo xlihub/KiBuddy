@@ -210,16 +210,18 @@ const LocalAgents: React.FC = () => {
         description={
           <>
             <span>{t('settings.agentManagement.localAgentsDescription')} </span>
-            <Button
-              type='text'
-              size='mini'
-              className='!h-auto !p-0 !align-baseline !text-13px !font-normal !text-primary-6 hover:!text-primary-7 hover:!underline underline-offset-2'
-              onClick={() => {
-                void openExternalUrl(localAgentSetupGuideUrl).catch(console.error);
-              }}
-            >
-              {t('settings.agentManagement.localAgentsSetupLink')}
-            </Button>
+            {localAgentSetupGuideUrl ? (
+              <Button
+                type='text'
+                size='mini'
+                className='!h-auto !p-0 !align-baseline !text-13px !font-normal !text-primary-6 hover:!text-primary-7 hover:!underline underline-offset-2'
+                onClick={() => {
+                  void openExternalUrl(localAgentSetupGuideUrl).catch(console.error);
+                }}
+              >
+                {t('settings.agentManagement.localAgentsSetupLink')}
+              </Button>
+            ) : null}
           </>
         }
         actions={

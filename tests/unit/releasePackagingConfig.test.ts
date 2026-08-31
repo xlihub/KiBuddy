@@ -31,7 +31,25 @@ function workflowStep(content: string, name: string): string {
   return nextStep === -1 ? rest : rest.slice(0, nextStep);
 }
 
+function workflowJob(content: string, name: string): string {
+  const marker = `  ${name}:`;
+  const start = content.indexOf(marker);
+  if (start === -1) return '';
+
+  const rest = content.slice(start + marker.length);
+  const nextJob = rest.search(/^  [a-zA-Z][a-zA-Z0-9-]*:\s*$/m);
+  return nextJob === -1 ? rest : rest.slice(0, nextJob);
+}
+
 describe('release packaging configuration', () => {
+  it('checks out complete history before project distribution unit tests', () => {
+    const workflow = readProjectFile('.github/workflows/pr-checks.yml');
+    const unitTestsJob = workflowJob(workflow, 'unit-tests');
+    const checkoutStep = workflowStep(unitTestsJob, 'Checkout code');
+
+    expect(checkoutStep).toContain('fetch-depth: 0');
+  });
+
   it.each([
     ['build-and-release.yml', 'Fetch mapped AionUi tag'],
     ['build-and-release.yml', 'Validate tag, mapping and upstream package'],

@@ -15,6 +15,23 @@ const rootPackageJson = JSON.parse(readFileSync(resolve(__dirname, '../../packag
 };
 const kiBuddyProductVersion = readFileSync(resolve(__dirname, '../../ki-buddy-version.txt'), 'utf-8').trim();
 
+function readEffectiveKiBuddyProductConfig(): unknown | undefined {
+  const buildPlanPath = process.env.KI_BUDDY_RESOLVED_BUILD_PLAN;
+  if (!buildPlanPath) return undefined;
+  const plan = JSON.parse(readFileSync(resolve(buildPlanPath), 'utf-8')) as {
+    schemaVersion?: unknown;
+    productConfig?: unknown;
+  };
+  if (plan.schemaVersion !== 1 || !plan.productConfig) {
+    throw new Error('Resolved project distribution build plan is missing its effective product configuration');
+  }
+  return plan.productConfig;
+}
+
+const effectiveKiBuddyProductConfig = readEffectiveKiBuddyProductConfig();
+const effectiveKiBuddyProductConfigDefine =
+  effectiveKiBuddyProductConfig === undefined ? 'undefined' : JSON.stringify(effectiveKiBuddyProductConfig);
+
 if (!kiBuddyProductVersion) {
   throw new Error('Ki-Buddy product version must not be empty');
 }
@@ -161,6 +178,7 @@ export default defineConfig(({ mode }) => {
         // Discontinued-build fork flag (see discontinuedBuild.ts). Only AionUi's
         // final `-final` tag build sets IS_DISCONTINUED_BUILD=true in CI.
         'process.env.IS_DISCONTINUED_BUILD': JSON.stringify(process.env.IS_DISCONTINUED_BUILD === 'true'),
+        __KI_BUDDY_EFFECTIVE_PRODUCT_CONFIG__: effectiveKiBuddyProductConfigDefine,
       },
     },
 
@@ -328,6 +346,7 @@ export default defineConfig(({ mode }) => {
         // Ki-Buddy packages use an independent release version. Renderer code
         // selects this value only when the explicit product capability exists.
         __KI_BUDDY_VERSION__: JSON.stringify(kiBuddyProductVersion),
+        __KI_BUDDY_EFFECTIVE_PRODUCT_CONFIG__: effectiveKiBuddyProductConfigDefine,
         // Renderer-side discontinued-build flag; consumed via discontinuedBuild.ts.
         __IS_DISCONTINUED_BUILD__: JSON.stringify(process.env.IS_DISCONTINUED_BUILD === 'true'),
         global: 'globalThis',

@@ -1,0 +1,24 @@
+{
+  "schemaVersion": 1,
+  "distributionId": "zxjt",
+  "version": "0.1.0",
+  "baseline": {
+    "repository": "xlihub/KiBuddy",
+    "commit": "b1f9f1a7b3e8c903f300ad2a832543d340858584"
+  },
+  "brand": {
+    "productName": "Ki-Buddy",
+    "packageName": "ki-buddy-zxjt",
+    "description": "Ki-Buddy local project distribution"
+  },
+  "identityMode": "local",
+  "integrations": [],
+  "disabledFeatures": ["account", "about", "feedback", "githubResources"],
+  "platforms": ["macos-arm64"],
+  "resources": {
+    "png": "resources/ki-buddy/app.png",
+    "ico": "resources/ki-buddy/app.ico",
+    "icns": "resources/ki-buddy/app.icns"
+  },
+  "nonSensitiveConfig": {}
+}

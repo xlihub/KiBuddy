@@ -18,6 +18,9 @@
  */
 
 import { afterEach, beforeEach, describe, it, expect } from 'vitest';
+import { KI_BUDDY_PRODUCT_CAPABILITY } from '@/common/platform/ki-buddy';
+import { render, screen } from '@testing-library/react';
+import React from 'react';
 
 describe('OfficeWatchViewer module shape', () => {
   it('module loads and exposes a default export', async () => {
@@ -42,6 +45,34 @@ describe('OfficeWatchViewer module shape', () => {
   it('uses official iOfficeAI OfficeCLI releases page', async () => {
     const mod = await import('@/renderer/pages/conversation/Preview/components/viewers/OfficeWatchViewer');
     expect(mod.OFFICECLI_INSTALL_URL).toBe('https://github.com/iOfficeAI/OfficeCLI/releases');
+    expect(mod.getOfficeCliInstallUrl()).toBe(mod.OFFICECLI_INSTALL_URL);
+  });
+
+  it('hides the OfficeCLI releases page when GitHub resources are disabled', async () => {
+    window.__kiBuddyProductPresentation = {
+      ...KI_BUDDY_PRODUCT_CAPABILITY!,
+      experience: {
+        ...KI_BUDDY_PRODUCT_CAPABILITY!.experience,
+        features: {
+          ...KI_BUDDY_PRODUCT_CAPABILITY!.experience.features,
+          githubResources: 'disabled',
+        },
+      },
+    };
+    const mod = await import('@/renderer/pages/conversation/Preview/components/viewers/OfficeWatchViewer');
+
+    expect(mod.getOfficeCliInstallUrl()).toBeNull();
+    render(<mod.OfficeCliInstallLink label='Install OfficeCLI' />);
+    expect(screen.queryByTestId('officecli-install-link')).toBeNull();
+    window.__kiBuddyProductPresentation = null;
+  });
+
+  it('renders the OfficeCLI installation action when GitHub resources are enabled', async () => {
+    const mod = await import('@/renderer/pages/conversation/Preview/components/viewers/OfficeWatchViewer');
+
+    render(<mod.OfficeCliInstallLink label='Install OfficeCLI' />);
+
+    expect(screen.getByTestId('officecli-install-link')).toHaveTextContent('Install OfficeCLI');
   });
 });
 
@@ -51,9 +82,14 @@ describe('OfficeWatchViewer module shape', () => {
  * and /api/ppt-proxy/{port}/{*path} — a bare trailing slash matches neither
  * and returns 404, which breaks every Office preview in webui mode.
  */
-const load = async () => {
+const loadOfficeWatchUrlResolver = async () => {
   const mod = await import('@/renderer/pages/conversation/Preview/components/viewers/OfficeWatchViewer');
   return mod.resolveOfficeWatchUrl;
+};
+
+const loadOfficeErrorActions = async () => {
+  const mod = await import('@/renderer/pages/conversation/Preview/components/viewers/OfficeWatchViewer');
+  return mod.resolveOfficeErrorActions;
 };
 
 describe('resolveOfficeWatchUrl (web mode, no window.electronAPI)', () => {
@@ -69,24 +105,24 @@ describe('resolveOfficeWatchUrl (web mode, no window.electronAPI)', () => {
   });
 
   it('returns the backend proxy url without appending a trailing slash', async () => {
-    const resolveOfficeWatchUrl = await load();
+    const resolveOfficeWatchUrl = await loadOfficeWatchUrlResolver();
     expect(resolveOfficeWatchUrl('/api/ppt-proxy/59324', 'ppt')).toBe('/api/ppt-proxy/59324');
   });
 
   it('drops a bare trailing slash from the proxy url', async () => {
-    const resolveOfficeWatchUrl = await load();
+    const resolveOfficeWatchUrl = await loadOfficeWatchUrlResolver();
     expect(resolveOfficeWatchUrl('/api/office-watch-proxy/59324/', 'word')).toBe('/api/office-watch-proxy/59324');
   });
 
   it('keeps a real sub-path on the proxy url', async () => {
-    const resolveOfficeWatchUrl = await load();
+    const resolveOfficeWatchUrl = await loadOfficeWatchUrlResolver();
     expect(resolveOfficeWatchUrl('/api/office-watch-proxy/59324/index.html', 'excel')).toBe(
       '/api/office-watch-proxy/59324/index.html'
     );
   });
 
   it('maps an absolute localhost watch url to the proxy path without trailing slash', async () => {
-    const resolveOfficeWatchUrl = await load();
+    const resolveOfficeWatchUrl = await loadOfficeWatchUrlResolver();
     expect(resolveOfficeWatchUrl('http://127.0.0.1:59324', 'ppt')).toBe('/api/ppt-proxy/59324');
   });
 });
@@ -105,13 +141,8 @@ describe('resolveOfficeWatchUrl (Electron mode)', () => {
  * panel shows a copyable server-side command instead (issue #3212 follow-up).
  */
 describe('resolveOfficeErrorActions', () => {
-  const load = async () => {
-    const mod = await import('@/renderer/pages/conversation/Preview/components/viewers/OfficeWatchViewer');
-    return mod.resolveOfficeErrorActions;
-  };
-
   it('web mode shows the server install guide when officecli is missing', async () => {
-    const resolveOfficeErrorActions = await load();
+    const resolveOfficeErrorActions = await loadOfficeErrorActions();
     expect(resolveOfficeErrorActions('OFFICECLI_NOT_FOUND', false)).toEqual({
       showServerInstallGuide: true,
       showInstallLink: false,
@@ -120,7 +151,7 @@ describe('resolveOfficeErrorActions', () => {
   });
 
   it('web mode shows the server install guide when auto-install failed', async () => {
-    const resolveOfficeErrorActions = await load();
+    const resolveOfficeErrorActions = await loadOfficeErrorActions();
     expect(resolveOfficeErrorActions('OFFICECLI_INSTALL_FAILED', false)).toEqual({
       showServerInstallGuide: true,
       showInstallLink: false,
@@ -129,7 +160,7 @@ describe('resolveOfficeErrorActions', () => {
   });
 
   it('electron mode keeps the local install link and never shows the server guide', async () => {
-    const resolveOfficeErrorActions = await load();
+    const resolveOfficeErrorActions = await loadOfficeErrorActions();
     expect(resolveOfficeErrorActions('OFFICECLI_NOT_FOUND', true)).toEqual({
       showServerInstallGuide: false,
       showInstallLink: true,
@@ -138,7 +169,7 @@ describe('resolveOfficeErrorActions', () => {
   });
 
   it('timeout errors only offer retry', async () => {
-    const resolveOfficeErrorActions = await load();
+    const resolveOfficeErrorActions = await loadOfficeErrorActions();
     expect(resolveOfficeErrorActions('OFFICECLI_PORT_TIMEOUT', false)).toEqual({
       showServerInstallGuide: false,
       showInstallLink: false,
@@ -147,7 +178,7 @@ describe('resolveOfficeErrorActions', () => {
   });
 
   it('non-recoverable errors offer no actions', async () => {
-    const resolveOfficeErrorActions = await load();
+    const resolveOfficeErrorActions = await loadOfficeErrorActions();
     expect(resolveOfficeErrorActions('PATH_OUTSIDE_SANDBOX', false)).toEqual({
       showServerInstallGuide: false,
       showInstallLink: false,

@@ -94,15 +94,21 @@ describe('Ki-Buddy main-process runtime facade', () => {
     expect(productMigrationMocks.channel).toHaveBeenCalledOnce();
   });
 
-  it('registers the Agents MCP only when the explicit Ki-Buddy capability is present', async () => {
+  it('registers the Agents MCP only when both capability and integration policy allow it', async () => {
     const configFile = {} as never;
     const kiBuddyExperience = createKiBuddyProductExperience(KI_BUDDY_PRODUCT_CONFIG_RESULT.config?.experience);
 
     await runProductBackendMigrations(configFile, kiBuddyExperience, 'ki-buddy');
     expect(productMigrationMocks.agentsMcp).toHaveBeenCalledOnce();
 
-    await runProductBackendMigrations(configFile, createAionUiProductExperience(), null);
+    await runProductBackendMigrations(configFile, kiBuddyExperience, 'ki-buddy', []);
     expect(productMigrationMocks.agentsMcp).toHaveBeenCalledOnce();
+
+    await runProductBackendMigrations(configFile, kiBuddyExperience, 'ki-buddy', ['agentsGateway']);
+    expect(productMigrationMocks.agentsMcp).toHaveBeenCalledTimes(2);
+
+    await runProductBackendMigrations(configFile, createAionUiProductExperience(), null);
+    expect(productMigrationMocks.agentsMcp).toHaveBeenCalledTimes(2);
   });
 
   it('starts and cleans up the Agents MCP bridge when the Tools capability is present', async () => {
@@ -133,6 +139,19 @@ describe('Ki-Buddy main-process runtime facade', () => {
     await expect(startAgentsMcpProductLifecycle(experience, {} as never, onWillQuit, startRuntimeBridge)).resolves.toBe(
       false
     );
+
+    expect(startRuntimeBridge).not.toHaveBeenCalled();
+    expect(onWillQuit).not.toHaveBeenCalled();
+  });
+
+  it('does not start the Agents MCP bridge when the integration is absent', async () => {
+    const startRuntimeBridge = vi.fn();
+    const onWillQuit = vi.fn();
+    const experience = createKiBuddyProductExperience(KI_BUDDY_PRODUCT_CONFIG_RESULT.config?.experience);
+
+    await expect(
+      startAgentsMcpProductLifecycle(experience, {} as never, onWillQuit, startRuntimeBridge, [])
+    ).resolves.toBe(false);
 
     expect(startRuntimeBridge).not.toHaveBeenCalled();
     expect(onWillQuit).not.toHaveBeenCalled();
@@ -197,6 +216,83 @@ describe('Ki-Buddy main-process runtime facade', () => {
       updaterCacheDirName: 'com.xlihub.ki-buddy',
     });
     expect(installTransportMock).toHaveBeenCalledOnce();
+  });
+
+  it('disables GitHub updates through product capability independently of Agents identity', () => {
+    const appPath = createAppPath('ki-buddy');
+    appPaths.push(appPath);
+    const baseConfig = KI_BUDDY_PRODUCT_CONFIG_RESULT.config!;
+    const selection = createKiBuddyRuntime(
+      { appPath, resetPassword: false, webUi: false },
+      {
+        config: {
+          ...baseConfig,
+          experience: {
+            ...baseConfig.experience,
+            features: { ...baseConfig.experience.features, githubResources: 'disabled' },
+          },
+        },
+        error: null,
+      }
+    );
+
+    expect(selection.runtime?.identityMode).toBe('agents');
+    expect(selection.runtime?.updateBridge).toBeNull();
+    expect(selection.runtime?.updateFeed).toBeNull();
+  });
+
+  it('starts a local project runtime without installing the Agents account transport', () => {
+    const appPath = createAppPath('ki-buddy');
+    appPaths.push(appPath);
+    const baseConfig = KI_BUDDY_PRODUCT_CONFIG_RESULT.config!;
+    const selection = createKiBuddyRuntime(
+      { appPath, resetPassword: false, webUi: false },
+      {
+        config: {
+          ...baseConfig,
+          distribution: {
+            schemaVersion: 1,
+            distributionId: 'zxjt',
+            identityMode: 'local',
+            mode: 'preview',
+            dataDirectory: 'Ki-Buddy-ZXJT-Preview',
+            credentialNamespace: 'ki-buddy-zxjt-preview',
+            integrations: [],
+            nonSensitiveConfig: {},
+          },
+          experience: {
+            ...baseConfig.experience,
+            features: {
+              ...baseConfig.experience.features,
+              account: 'disabled',
+              agents: 'enabled',
+              about: 'disabled',
+              feedback: 'disabled',
+              githubResources: 'disabled',
+            },
+          },
+        },
+        error: null,
+      }
+    );
+
+    expect(selection.runtime).toMatchObject({
+      coreAuthOptions: null,
+      identityMode: 'local',
+      integrations: [],
+      productExperience: expect.any(Object),
+      registerAuthBridge: null,
+      updateBridge: null,
+      updateFeed: null,
+    });
+    expect(selection.runtime?.productExperience.featureState('account')).toBe('disabled');
+    expect(selection.runtime?.productExperience.featureState('agents')).toBe('enabled');
+    expect(selection.runtime?.productCapability.integrations).toEqual([]);
+    expect(createKiBuddyProductBootstrap(selection)).toMatchObject({
+      status: 'ready',
+      identityMode: 'local',
+    });
+    expect(installTransportMock).not.toHaveBeenCalled();
   });
 
   it('exposes account-aware migration scheduling only through the Ki-Buddy runtime', async () => {

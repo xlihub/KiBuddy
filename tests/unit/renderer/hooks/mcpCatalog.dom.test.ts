@@ -22,7 +22,7 @@ vi.mock('@/common/adapter/ipcBridge', () => ({
 }));
 
 import { ensureBackendMcpCatalog, loadProductBuiltinMcpResourceState } from '@/renderer/hooks/mcp/catalog';
-import { createKiBuddyProductExperience } from '@/common/platform/ki-buddy';
+import { createKiBuddyProductExperience, KI_BUDDY_PRODUCT_CAPABILITY } from '@/common/platform/ki-buddy';
 import productConfig from '../../../../ki-buddy-product.json';
 
 describe('ensureBackendMcpCatalog', () => {
@@ -179,6 +179,69 @@ describe('ensureBackendMcpCatalog', () => {
     ]);
   });
 
+  it('hides a legacy Agents MCP when the Agents Gateway integration is unavailable', async () => {
+    mcpServiceMock.listServers.invoke.mockResolvedValue([
+      {
+        id: 'legacy-agents-mcp-id',
+        name: 'agents-mcp-adapter',
+        enabled: true,
+        transport: {
+          type: 'stdio',
+          command: 'node',
+          args: ['/Applications/Ki-Buddy/resources/app.asar.unpacked/out/main/builtin-mcp-agents.js'],
+        },
+        created_at: 1,
+        updated_at: 1,
+        original_json: '{}',
+        builtin: true,
+      },
+    ]);
+
+    const result = await ensureBackendMcpCatalog(createKiBuddyProductExperience(productConfig.experience), []);
+
+    expect(result.entries).toEqual([]);
+    expect(result.allServers).toEqual([]);
+    expect(result.hiddenResources).toEqual([
+      expect.objectContaining({
+        resourceId: 'builtin:agents-mcp-adapter',
+        origin: 'productBuiltin',
+        access: 'hidden',
+      }),
+    ]);
+  });
+
+  it('classifies and hides a local legacy Agents MCP when the Agents Gateway integration is unavailable', async () => {
+    getClientBusinessSettingMock.mockResolvedValue([
+      {
+        id: 'local-legacy-agents-mcp-id',
+        name: 'agents-mcp-adapter',
+        enabled: true,
+        transport: {
+          type: 'stdio',
+          command: 'node',
+          args: ['/Applications/Ki-Buddy/resources/app.asar.unpacked/out/main/builtin-mcp-agents.js'],
+        },
+        created_at: 1,
+        updated_at: 1,
+        original_json: '{}',
+        builtin: true,
+      },
+    ]);
+    mcpServiceMock.listServers.invoke.mockResolvedValue([]);
+
+    const result = await ensureBackendMcpCatalog(createKiBuddyProductExperience(productConfig.experience), []);
+
+    expect(result.builtinServers).toEqual([]);
+    expect(result.allServers).toEqual([]);
+    expect(result.hiddenResources).toContainEqual(
+      expect.objectContaining({
+        resourceId: 'builtin:agents-mcp-adapter',
+        origin: 'productBuiltin',
+        access: 'hidden',
+      })
+    );
+  });
+
   it('emits structured diagnostics for MCP resources hidden by the active product policy', async () => {
     const info = vi.spyOn(console, 'info').mockImplementation(() => undefined);
     getClientBusinessSettingMock.mockResolvedValue([
@@ -224,6 +287,15 @@ describe('loadProductBuiltinMcpResourceState', () => {
 
   beforeEach(() => {
     vi.clearAllMocks();
+    window.__kiBuddyProductPresentation = null;
+  });
+
+  it('does not require the Agents MCP when the Agents Gateway integration is unavailable', async () => {
+    window.__kiBuddyProductPresentation = { ...KI_BUDDY_PRODUCT_CAPABILITY, integrations: [] };
+    mcpServiceMock.listServers.invoke.mockResolvedValue([]);
+
+    await expect(loadProductBuiltinMcpResourceState(experience)).resolves.toEqual({ status: 'ready', missing: [] });
+    expect(mcpServiceMock.listServers.invoke).not.toHaveBeenCalled();
   });
 
   it('reports an installation-integrity failure after a ready catalog omits a required product MCP', async () => {

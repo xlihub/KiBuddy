@@ -8,12 +8,13 @@ import { ipcBridge } from '@/common';
 import { configService } from '@/common/config/configService';
 import { openExternalUrl } from '@/renderer/utils/platform';
 import { getProductSkillsMarketDetailsUrl } from '@/renderer/services/runtime/productBrandRuntime';
-import { Message, Switch, Tooltip } from '@arco-design/web-react';
+import { Message, Switch } from '@arco-design/web-react';
 import React, { useCallback, useEffect, useState } from 'react';
 import { useTranslation } from 'react-i18next';
 
 const SkillsMarketBanner: React.FC = () => {
   const { t, i18n } = useTranslation();
+  const detailsUrl = getProductSkillsMarketDetailsUrl(i18n.language);
   const [enabled, setEnabled] = useState(false);
   const [loading, setLoading] = useState(false);
   const [initialized, setInitialized] = useState(false);
@@ -52,12 +53,13 @@ const SkillsMarketBanner: React.FC = () => {
   );
 
   const handleOpenDetails = useCallback(async () => {
+    if (!detailsUrl) return;
     try {
-      await openExternalUrl(getProductSkillsMarketDetailsUrl(i18n.language));
+      await openExternalUrl(detailsUrl);
     } catch (error) {
       console.error('Failed to open Skills Market URL:', error);
     }
-  }, [i18n.language]);
+  }, [detailsUrl]);
 
   const [hovered, setHovered] = useState(false);
 
@@ -84,12 +86,14 @@ const SkillsMarketBanner: React.FC = () => {
           {hovered && (
             <div className='text-12px text-[var(--color-text-3)] mt-2px leading-tight animate-fade-in'>
               {t('conversation.welcome.skillsMarketDesc')}{' '}
-              <span
-                className='text-brand hover:text-brand-hover font-semibold cursor-pointer hover:underline transition-colors'
-                onClick={handleOpenDetails}
-              >
-                {t('conversation.welcome.skillsMarketDetails')}
-              </span>
+              {detailsUrl ? (
+                <span
+                  className='text-brand hover:text-brand-hover font-semibold cursor-pointer hover:underline transition-colors'
+                  onClick={handleOpenDetails}
+                >
+                  {t('conversation.welcome.skillsMarketDetails')}
+                </span>
+              ) : null}
             </div>
           )}
         </div>

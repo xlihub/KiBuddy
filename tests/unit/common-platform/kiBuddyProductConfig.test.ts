@@ -63,6 +63,7 @@ const validConfig = {
     features: {
       account: 'enabled',
       agents: 'enabled',
+      about: 'enabled',
       appearance: 'enabled',
       assistants: 'enabled',
       channels: 'disabled',
@@ -72,10 +73,12 @@ const validConfig = {
       extensionMarketplace: 'disabled',
       extensionRuntime: 'disabled',
       extensionSettings: 'disabled',
+      feedback: 'enabled',
       guid: 'enabled',
       guidFeedback: 'disabled',
       guidGithubStar: 'disabled',
       guidWebUi: 'disabled',
+      githubResources: 'enabled',
       models: 'enabled',
       scheduledTasks: 'enabled',
       skills: 'enabled',
@@ -194,6 +197,100 @@ describe('Ki-Buddy product configuration', () => {
     expect(Object.isFrozen(config.brand.links)).toBe(true);
     expect(Object.isFrozen(config.assets.renderer)).toBe(true);
     expect(Object.isFrozen(config.experience.resources.assistant)).toBe(true);
+  });
+
+  it('keeps local CLI Agent management enabled for a local project distribution', () => {
+    const localConfig = {
+      ...validConfig,
+      distribution: {
+        schemaVersion: 1,
+        distributionId: 'zxjt',
+        identityMode: 'local',
+        mode: 'preview',
+        dataDirectory: 'Ki-Buddy-ZXJT-Preview',
+        credentialNamespace: 'ki-buddy-zxjt-preview',
+        integrations: [],
+        nonSensitiveConfig: { deployment: 'local' },
+      },
+      experience: {
+        ...validConfig.experience,
+        features: {
+          ...validConfig.experience.features,
+          account: 'disabled',
+          agents: 'enabled',
+          about: 'disabled',
+          feedback: 'disabled',
+        },
+      },
+    } as const;
+
+    expect(parseKiBuddyProductConfig(localConfig).distribution).toMatchObject({
+      distributionId: 'zxjt',
+      identityMode: 'local',
+      dataDirectory: 'Ki-Buddy-ZXJT-Preview',
+      integrations: [],
+    });
+    expect(parseKiBuddyProductConfig(localConfig).experience.features.agents).toBe('enabled');
+    expect(() =>
+      parseKiBuddyProductConfig({
+        ...localConfig,
+        experience: validConfig.experience,
+      })
+    ).toThrow('must disable account');
+  });
+
+  it('rejects unknown or external project identity configuration', () => {
+    expect(() =>
+      parseKiBuddyProductConfig({
+        ...validConfig,
+        distribution: {
+          schemaVersion: 1,
+          distributionId: 'zxjt',
+          identityMode: 'external',
+          mode: 'preview',
+          dataDirectory: 'Ki-Buddy-ZXJT-Preview',
+          credentialNamespace: 'ki-buddy-zxjt-preview',
+          integrations: [],
+          nonSensitiveConfig: {},
+        },
+      })
+    ).toThrow('identity mode');
+  });
+
+  it('rejects an unsafe project data-directory identity', () => {
+    expect(() =>
+      parseKiBuddyProductConfig({
+        ...validConfig,
+        distribution: {
+          schemaVersion: 1,
+          distributionId: 'zxjt',
+          identityMode: 'local',
+          mode: 'preview',
+          dataDirectory: '../Ki-Buddy',
+          credentialNamespace: 'ki-buddy-zxjt-preview',
+          integrations: [],
+          nonSensitiveConfig: {},
+        },
+      })
+    ).toThrow('data directory');
+  });
+
+  it('rejects unknown project integrations at runtime', () => {
+    expect(() =>
+      parseKiBuddyProductConfig({
+        ...validConfig,
+        distribution: {
+          schemaVersion: 1,
+          distributionId: 'zxjt',
+          identityMode: 'local',
+          mode: 'preview',
+          dataDirectory: 'Ki-Buddy-ZXJT-Preview',
+          credentialNamespace: 'ki-buddy-zxjt-preview',
+          integrations: ['unknownIntegration'],
+          nonSensitiveConfig: {},
+        },
+      })
+    ).toThrow('integration');
   });
 
   it('rejects unknown runtime product fields', () => {

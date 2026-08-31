@@ -79,7 +79,11 @@
           var product =
             candidate &&
             candidate.id === 'ki-buddy' &&
-            candidate.schemaVersion === 3 &&
+            candidate.schemaVersion === 4 &&
+            Array.isArray(candidate.integrations) &&
+            candidate.integrations.every(function (integration) {
+              return integration === 'agentsGateway';
+            }) &&
             candidate.brand &&
             typeof candidate.brand.productName === 'string' &&
             candidate.assets &&

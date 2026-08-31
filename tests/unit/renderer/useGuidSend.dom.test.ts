@@ -199,6 +199,21 @@ describe('useGuidSend', () => {
     expect(payload.extra.selected_session_mcp_servers).toEqual([expect.objectContaining({ id: 'builtin-mcp' })]);
   });
 
+  it('removes unavailable MCP ids from conversation overrides at the send boundary', async () => {
+    const deps = createDeps();
+    deps.selectedMcpServerIds = ['mcp-user', 'legacy-agents-adapter'];
+
+    const { result } = renderHook(() => useGuidSend(deps));
+
+    await act(async () => {
+      await result.current.handleSend();
+    });
+
+    const payload = createConversationInvokeMock.mock.calls[0][0];
+    expect(payload.assistant?.conversation_overrides?.mcp_ids).toEqual(['mcp-user']);
+    expect(payload.extra.selected_mcp_server_ids).toEqual(['mcp-user']);
+  });
+
   it('sends the official Assistant required Adapter after the user clears the checkbox selection', async () => {
     const deps = createDeps();
     const officialAssistant = KI_BUDDY_PRODUCT_RESOURCE_REGISTRY.assistant.agentsExecution;
@@ -220,7 +235,7 @@ describe('useGuidSend', () => {
     deps.selectedAssistantId = officialAssistant.id;
     deps.availableMcpServers = [agentsAdapterServer];
     deps.selectedMcpServerIds = resolveKiBuddyAssistantEffectiveMcpServerIds(
-      { id: 'ki-buddy' },
+      { id: 'ki-buddy', integrations: ['agentsGateway'] },
       { id: officialAssistant.id, source: officialAssistant.source },
       [agentsAdapterServer],
       []

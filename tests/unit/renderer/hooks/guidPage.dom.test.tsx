@@ -340,7 +340,7 @@ describe('GuidPage', () => {
     ensureBackendMcpCatalogMock.mockReset();
     ensureBackendMcpCatalogMock.mockResolvedValue({ allServers: [] });
     getKiBuddyProductRuntimeMock.mockReset();
-    getKiBuddyProductRuntimeMock.mockReturnValue({ id: 'ki-buddy' });
+    getKiBuddyProductRuntimeMock.mockReturnValue({ id: 'ki-buddy', integrations: ['agentsGateway'] });
     swrMock.useSWRMock.mockReturnValue({ data: null });
     capturedGuidActionRowProps.length = 0;
     capturedAssistantSelectionAreaProps.length = 0;

@@ -9,6 +9,7 @@ import type { KiBuddyMainCoreTransport } from './KiBuddyMainCoreTransport';
 type RegisterKiBuddyAuthOptions = {
   bootstrapSecret: string;
   coreTransport: KiBuddyMainCoreTransport;
+  credentialStorageNamespace?: string;
   getCoreBaseUrl: () => string;
   onSessionAuthenticated?: (coreUserId: string) => void;
 };
@@ -149,7 +150,9 @@ export function registerKiBuddyAuthBridge(options: RegisterKiBuddyAuthOptions): 
     agentsFetch: createAgentsNetworkFetch(),
     bootstrapSecret: options.bootstrapSecret,
     clearCoreSession: () => clearCoreSession(options.getCoreBaseUrl(), options.coreTransport),
-    credentialStore: new KeytarCredentialStore(app.getPath('userData')),
+    credentialStore: new KeytarCredentialStore(app.getPath('userData'), {
+      storageNamespace: options.credentialStorageNamespace,
+    }),
     fetch,
     getCoreBaseUrl: options.getCoreBaseUrl,
     onSessionActivated: options.onSessionAuthenticated,

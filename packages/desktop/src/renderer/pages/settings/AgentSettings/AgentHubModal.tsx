@@ -8,6 +8,7 @@ import type { IHubAgentItem } from '@/common/types/agent/hub';
 import { resolveAgentAvatar, useAgentLogos } from '@renderer/utils/model/agentLogo';
 import ThemedLogo from '@/renderer/components/agent/ThemedLogo';
 import { openExternalUrl } from '@/renderer/utils/platform';
+import { getProductGitHubResourceUrl } from '@/renderer/services/runtime/productBrandRuntime';
 
 interface AgentHubModalProps {
   visible: boolean;
@@ -20,9 +21,10 @@ export const AgentHubModal: React.FC<AgentHubModalProps> = ({ visible, onCancel 
   const { t } = useTranslation();
   const logos = useAgentLogos();
   const { agents, loading, error, install, retryInstall, update } = useHubAgents();
+  const aionHubRepoUrl = getProductGitHubResourceUrl(AION_HUB_REPO_URL);
   const actionButtonClassName = '!min-w-80px !rounded-9px !px-10px';
   const openAionHubRepo = () => {
-    void openExternalUrl(AION_HUB_REPO_URL).catch(console.error);
+    if (aionHubRepoUrl) void openExternalUrl(aionHubRepoUrl).catch(console.error);
   };
 
   const renderActionBtn = (agent: IHubAgentItem) => {
@@ -95,18 +97,20 @@ export const AgentHubModal: React.FC<AgentHubModalProps> = ({ visible, onCancel 
       style={{ width: 1000, maxWidth: '96vw' }}
     >
       <div>
-        <div className='mb-12px flex flex-wrap items-center justify-start gap-x-6px gap-y-2px text-start'>
-          <Typography.Text type='secondary' className='text-12px leading-18px text-t-secondary'>
-            {t('settings.agentManagement.marketContributionHint', {
-              defaultValue: 'Want a new Agent listed here?',
-            })}
-          </Typography.Text>
-          <Link className='text-12px leading-18px' onClick={openAionHubRepo}>
-            {t('settings.agentManagement.marketContributionAction', {
-              defaultValue: 'Open a PR on AionHub',
-            })}
-          </Link>
-        </div>
+        {aionHubRepoUrl ? (
+          <div className='mb-12px flex flex-wrap items-center justify-start gap-x-6px gap-y-2px text-start'>
+            <Typography.Text type='secondary' className='text-12px leading-18px text-t-secondary'>
+              {t('settings.agentManagement.marketContributionHint', {
+                defaultValue: 'Want a new Agent listed here?',
+              })}
+            </Typography.Text>
+            <Link className='text-12px leading-18px' onClick={openAionHubRepo}>
+              {t('settings.agentManagement.marketContributionAction', {
+                defaultValue: 'Open a PR on AionHub',
+              })}
+            </Link>
+          </div>
+        ) : null}
 
         {loading ? (
           <div className='flex items-center justify-center py-48px'>

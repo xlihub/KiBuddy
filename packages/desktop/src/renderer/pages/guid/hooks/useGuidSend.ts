@@ -123,6 +123,7 @@ export const useGuidSend = (deps: GuidSendDeps): GuidSendResult => {
       : excludeBuiltinSkills;
     const selectedAllMcpServerIds = selectedMcpServerIds ?? [];
     const selectedMcpServerIdSet = new Set(selectedAllMcpServerIds);
+    const availableMcpServerIdSet = new Set(availableMcpServers.map(({ id }) => id));
     const selectedUserMcpServerIds = availableMcpServers
       .filter((server) => selectedMcpServerIdSet.has(server.id) && server.builtin !== true)
       .map((server) => server.id);
@@ -136,8 +137,11 @@ export const useGuidSend = (deps: GuidSendDeps): GuidSendResult => {
     const defaultSelectedUserMcpServerIds = availableMcpServers
       .filter((server) => (defaultSelectedMcpServerIds ?? []).includes(server.id) && server.builtin !== true)
       .map((server) => server.id);
-    const assistantOverrideMcpIds =
+    const requestedAssistantOverrideMcpIds =
       selectedMcpServerIds !== undefined ? selectedAllMcpServerIds : defaultSelectedMcpServerIds;
+    const assistantOverrideMcpIds = requestedAssistantOverrideMcpIds?.filter((serverId) =>
+      availableMcpServerIdSet.has(serverId)
+    );
     const selectedUserMcpServerIdsToSend =
       selectedMcpServerIds !== undefined ? selectedUserMcpServerIds : defaultSelectedUserMcpServerIds;
     const selectedSessionMcpServersToSend =

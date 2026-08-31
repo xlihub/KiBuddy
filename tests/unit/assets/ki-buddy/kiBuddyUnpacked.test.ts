@@ -1,4 +1,4 @@
-import { copyFileSync, mkdirSync, mkdtempSync, rmSync, writeFileSync } from 'node:fs';
+import { copyFileSync, mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { dirname, join, resolve } from 'node:path';
 import { describe, expect, it } from 'vitest';
@@ -9,7 +9,60 @@ const { readProductConfig } = require('../../../../packages/shared-scripts/src/k
 const { resolveKiBuddyPackagingIdentity } = require('../../../../packages/shared-scripts/src/kiBuddyPackagingIdentity');
 const projectRoot = resolve(__dirname, '../../../..');
 
-function createLinuxFixture(expectedIdentity?) {
+function projectBuildPlan(packagingIdentity) {
+  return {
+    schemaVersion: 1,
+    distributionId: 'zxjt',
+    mode: 'preview',
+    version: '0.1.0',
+    identityMode: 'local',
+    source: { repository: 'xlihub/KiBuddy', commit: 'a'.repeat(40), treeState: 'committed' },
+    registration: { revision: 'b'.repeat(40) },
+    manifest: { digest: 'c'.repeat(64) },
+    baseline: { repository: 'xlihub/KiBuddy', commit: 'd'.repeat(40) },
+    platforms: ['macos-arm64'],
+    integrations: [],
+    disabledFeatures: ['account', 'agents', 'about', 'feedback', 'githubResources'],
+    runtimeIdentity: {
+      dataDirectory: 'Ki-Buddy-ZXJT-Preview',
+      credentialNamespace: 'ki-buddy-zxjt-preview',
+    },
+    kiCore: {
+      repository: 'xlihub/Ki-Core',
+      tag: 'ki-core-v0.1.4',
+      commit: 'e'.repeat(40),
+      aionCore: { repository: 'iOfficeAI/AionCore', tag: 'v0.1.72', peeledCommit: 'f'.repeat(40) },
+      platform: 'macos-arm64',
+      checksum: '1'.repeat(64),
+    },
+    secretScope: { kind: 'none', names: [] },
+    packagingIdentity,
+  };
+}
+
+function distributionEvidence(buildPlan) {
+  return Object.fromEntries(
+    [
+      'schemaVersion',
+      'distributionId',
+      'mode',
+      'version',
+      'identityMode',
+      'source',
+      'registration',
+      'manifest',
+      'baseline',
+      'platforms',
+      'integrations',
+      'disabledFeatures',
+      'runtimeIdentity',
+      'kiCore',
+      'secretScope',
+    ].map((key) => [key, buildPlan[key]])
+  );
+}
+
+function createLinuxFixture(expectedIdentity?, expectedBuildPlan?) {
   const packagingIdentity = expectedIdentity ?? resolveKiBuddyPackagingIdentity(readProductConfig(projectRoot));
   const root = mkdtempSync(join(tmpdir(), 'ki-buddy-unpacked-'));
   const resourcesDir = join(root, 'resources');
@@ -41,6 +94,17 @@ function createLinuxFixture(expectedIdentity?) {
       productName: packagingIdentity.desktop.productName,
     },
     ...(expectedIdentity ? { packagingIdentity } : {}),
+    ...(expectedBuildPlan ? { distribution: distributionEvidence(expectedBuildPlan) } : {}),
+    ...(expectedBuildPlan
+      ? {
+          source: {
+            repository: expectedBuildPlan.source.repository,
+            commit: expectedBuildPlan.source.commit,
+            treeDirty: false,
+            stateSha256: '2'.repeat(64),
+          },
+        }
+      : {}),
   };
   writeFileSync(join(resourcesDir, packagingIdentity.resources.packaged.buildEvidence), JSON.stringify(evidence));
   writeFileSync(
@@ -60,25 +124,22 @@ function createLinuxFixture(expectedIdentity?) {
   return root;
 }
 
-function createMacFixture(expectedIdentity, bundleIdentifier: string) {
+function createMacFixture(expectedIdentity, bundleIdentifier: string, expectedBuildPlan?) {
   const packagingIdentity = expectedIdentity;
   const root = mkdtempSync(join(tmpdir(), 'ki-buddy-mac-unpacked-'));
   const applicationRoot = join(root, `${packagingIdentity.desktop.productName}.app`);
   const contentsDir = join(applicationRoot, 'Contents');
   const resourcesDir = join(contentsDir, 'Resources');
   const executablePath = join(contentsDir, 'MacOS', packagingIdentity.desktop.executableName);
-  const managedResourcesDir = join(
-    resourcesDir,
-    packagingIdentity.resources.packaged.bundledAionCore,
-    'darwin-x64',
-    'managed-resources'
-  );
+  const runtimeKey = expectedBuildPlan ? 'darwin-arm64' : 'darwin-x64';
+  const runtimeDirectory = join(resourcesDir, packagingIdentity.resources.packaged.bundledAionCore, runtimeKey);
+  const managedResourcesDir = join(runtimeDirectory, 'managed-resources');
   mkdirSync(dirname(executablePath), { recursive: true });
   mkdirSync(dirname(join(resourcesDir, packagingIdentity.resources.packaged.applicationIcon)), { recursive: true });
   mkdirSync(dirname(join(resourcesDir, packagingIdentity.resources.packaged.runtimeIcon)), { recursive: true });
   mkdirSync(dirname(join(resourcesDir, packagingIdentity.resources.packaged.buildEvidence)), { recursive: true });
   mkdirSync(dirname(join(resourcesDir, packagingIdentity.resources.packaged.agentsMcpAdapter)), { recursive: true });
-  mkdirSync(join(managedResourcesDir, 'node', 'node-v24-darwin-x64', 'bin'), { recursive: true });
+  mkdirSync(join(managedResourcesDir, 'node', `node-v24-${runtimeKey}`, 'bin'), { recursive: true });
   writeFileSync(executablePath, 'executable');
   copyFileSync(
     join(projectRoot, packagingIdentity.resources.platform.png),
@@ -98,22 +159,53 @@ function createMacFixture(expectedIdentity, bundleIdentifier: string) {
         productName: packagingIdentity.desktop.productName,
       },
       packagingIdentity,
+      ...(expectedBuildPlan ? { distribution: distributionEvidence(expectedBuildPlan) } : {}),
+      ...(expectedBuildPlan
+        ? {
+            source: {
+              repository: expectedBuildPlan.source.repository,
+              commit: expectedBuildPlan.source.commit,
+              treeDirty: false,
+              stateSha256: '2'.repeat(64),
+            },
+          }
+        : {}),
     })
   );
+  if (expectedBuildPlan) {
+    writeFileSync(
+      join(runtimeDirectory, 'manifest.json'),
+      JSON.stringify({
+        schemaVersion: 3,
+        platform: 'darwin',
+        arch: 'arm64',
+        source: {
+          policy: 'release-pinned',
+          repository: expectedBuildPlan.kiCore.repository,
+          tag: expectedBuildPlan.kiCore.tag,
+        },
+        kiCore: {
+          tag: expectedBuildPlan.kiCore.tag,
+          releaseCommit: expectedBuildPlan.kiCore.commit,
+        },
+        aionCore: expectedBuildPlan.kiCore.aionCore,
+      })
+    );
+  }
   writeFileSync(
     join(managedResourcesDir, 'manifest.json'),
     JSON.stringify({
       schemaVersion: 2,
-      runtimeKey: 'darwin-x64',
+      runtimeKey,
       node: {
         version: '24.0.0',
-        root: 'node/node-v24-darwin-x64',
+        root: `node/node-v24-${runtimeKey}`,
         executable: 'bin/node',
       },
       clis: [],
     })
   );
-  writeFileSync(join(managedResourcesDir, 'node', 'node-v24-darwin-x64', 'bin', 'node'), 'node');
+  writeFileSync(join(managedResourcesDir, 'node', `node-v24-${runtimeKey}`, 'bin', 'node'), 'node');
   writeFileSync(
     join(contentsDir, 'Info.plist'),
     `<?xml version="1.0" encoding="UTF-8"?>
@@ -185,6 +277,52 @@ describe('Ki-Buddy unpacked product verification', () => {
     }
   });
 
+  it('accepts project evidence that matches the immutable distribution build plan', () => {
+    const identity = createProjectPackagingOverlay();
+    const buildPlan = projectBuildPlan(identity);
+    const fixture = createLinuxFixture(identity, buildPlan);
+    try {
+      expect(verifyKiBuddyUnpacked(projectRoot, fixture, 'linux', identity, buildPlan)).toMatchObject({
+        platform: 'linux',
+      });
+    } finally {
+      rmSync(fixture, { recursive: true, force: true });
+    }
+  });
+
+  it('rejects project evidence whose source no longer matches the resolved build plan', () => {
+    const identity = createProjectPackagingOverlay();
+    const packagedPlan = projectBuildPlan(identity);
+    const expectedPlan = structuredClone(packagedPlan);
+    expectedPlan.source.commit = '9'.repeat(40);
+    const fixture = createLinuxFixture(identity, packagedPlan);
+    try {
+      expect(() => verifyKiBuddyUnpacked(projectRoot, fixture, 'linux', identity, expectedPlan)).toThrow(
+        'distribution does not match'
+      );
+    } finally {
+      rmSync(fixture, { recursive: true, force: true });
+    }
+  });
+
+  it('rejects project evidence produced from a dirty source tree', () => {
+    const identity = createProjectPackagingOverlay();
+    const buildPlan = projectBuildPlan(identity);
+    const fixture = createLinuxFixture(identity, buildPlan);
+    try {
+      const evidencePath = join(fixture, 'resources', identity.resources.packaged.buildEvidence);
+      const evidence = JSON.parse(readFileSync(evidencePath, 'utf8'));
+      evidence.source.treeDirty = true;
+      writeFileSync(evidencePath, JSON.stringify(evidence));
+
+      expect(() => verifyKiBuddyUnpacked(projectRoot, fixture, 'linux', identity, buildPlan)).toThrow(
+        'clean committed source'
+      );
+    } finally {
+      rmSync(fixture, { recursive: true, force: true });
+    }
+  });
+
   it('rejects packaged evidence that does not match the expected installation identity', () => {
     const packagedIdentity = createProjectPackagingOverlay();
     const expectedIdentity = structuredClone(packagedIdentity);
@@ -199,16 +337,55 @@ describe('Ki-Buddy unpacked product verification', () => {
     }
   });
 
+  it.runIf(process.platform === 'darwin')('accepts a macOS project app with release-pinned Ki-Core provenance', () => {
+    const identity = createProjectPackagingOverlay();
+    const buildPlan = projectBuildPlan(identity);
+    const fixture = createMacFixture(identity, identity.desktop.appId, buildPlan);
+    try {
+      expect(verifyKiBuddyUnpacked(projectRoot, fixture, 'darwin', identity, buildPlan)).toMatchObject({
+        platform: 'darwin',
+        managedNodePath: expect.stringContaining('darwin-arm64'),
+      });
+    } finally {
+      rmSync(fixture, { recursive: true, force: true });
+    }
+  });
+
+  it.runIf(process.platform === 'darwin')('rejects a macOS project app with unapproved Ki-Core provenance', () => {
+    const identity = createProjectPackagingOverlay();
+    const buildPlan = projectBuildPlan(identity);
+    const fixture = createMacFixture(identity, identity.desktop.appId, buildPlan);
+    try {
+      const manifestPath = join(
+        fixture,
+        `${identity.desktop.productName}.app`,
+        'Contents',
+        'Resources',
+        identity.resources.packaged.bundledAionCore,
+        'darwin-arm64',
+        'manifest.json'
+      );
+      const manifest = JSON.parse(readFileSync(manifestPath, 'utf8'));
+      manifest.source.policy = 'development';
+      writeFileSync(manifestPath, JSON.stringify(manifest));
+
+      expect(() => verifyKiBuddyUnpacked(projectRoot, fixture, 'darwin', identity, buildPlan)).toThrow(
+        'Ki-Core provenance does not match'
+      );
+    } finally {
+      rmSync(fixture, { recursive: true, force: true });
+    }
+  });
+
   it.runIf(process.platform === 'darwin')(
-    'keeps project verification independent of additional macOS installation identity checks',
+    'rejects a macOS app whose bundle identifier does not match the project identity',
     () => {
       const identity = createProjectPackagingOverlay();
       const fixture = createMacFixture(identity, 'com.example.wrong');
       try {
-        expect(verifyKiBuddyUnpacked(projectRoot, fixture, 'darwin', identity)).toMatchObject({
-          platform: 'darwin',
-          productName: 'Acme Buddy',
-        });
+        expect(() => verifyKiBuddyUnpacked(projectRoot, fixture, 'darwin', identity)).toThrow(
+          'CFBundleIdentifier does not match'
+        );
       } finally {
         rmSync(fixture, { recursive: true, force: true });
       }

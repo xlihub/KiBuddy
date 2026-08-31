@@ -57,6 +57,7 @@ import {
   getKiBuddyProductRuntime,
   getKiBuddyRendererRuntime,
   isProductFeatureEnabled,
+  shouldValidateKiBuddyProductResources,
 } from './services/runtime/kiBuddyRuntime';
 import { initializeRendererBrand, installProductAssistantCatalogAdapter } from './services/runtime/productBrandRuntime';
 import { FeedbackProvider } from './hooks/context/FeedbackContext';
@@ -93,9 +94,10 @@ import './styles/markdown.css';
 import { configService } from '@/common/config/configService';
 const kiBuddyRuntime = getKiBuddyRendererRuntime();
 const kiBuddyProductRuntime = getKiBuddyProductRuntime();
+const kiBuddyAgentsAuthEnabled = Boolean(kiBuddyRuntime) && isProductFeatureEnabled('account');
 const kiBuddyProductBootstrapError = getKiBuddyProductBootstrapError();
 if (!kiBuddyProductBootstrapError) {
-  if (kiBuddyRuntime) installKiBuddyRendererCoreTransport();
+  if (kiBuddyAgentsAuthEnabled) installKiBuddyRendererCoreTransport();
   installProductAssistantCatalogAdapter();
   initializeRendererBrand();
   configService.initialize().catch((err) => {
@@ -316,7 +318,7 @@ const RuntimeFailureDialogs: React.FC = () => {
 // in per-hook with `revalidateOnFocus: true`.
 const SWR_DEFAULTS = { revalidateOnFocus: false } as const;
 
-const RuntimeAuthProvider = kiBuddyRuntime ? KiBuddyAuthProvider : AuthProvider;
+const RuntimeAuthProvider = kiBuddyAgentsAuthEnabled ? KiBuddyAuthProvider : AuthProvider;
 
 const AppProviders: React.FC<PropsWithChildren> = ({ children }) =>
   React.createElement(
@@ -382,7 +384,7 @@ const Main = () => {
   }
 
   return (
-    <KiBuddyProductResourceIntegrityGate enabled={Boolean(kiBuddyRuntime) && status === 'authenticated'}>
+    <KiBuddyProductResourceIntegrityGate enabled={shouldValidateKiBuddyProductResources(status)}>
       <Router
         layout={
           <ConversationHistoryProvider>

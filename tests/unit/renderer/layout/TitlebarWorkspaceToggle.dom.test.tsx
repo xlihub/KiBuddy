@@ -146,4 +146,12 @@ describe('Titlebar workspace toggle', () => {
     render(<Titlebar workspaceAvailable={false} />);
     expect(screen.getByTestId('conversation-search')).toBeInTheDocument();
   });
+
+  it('removes the report action when project product feedback is disabled', () => {
+    activateKiBuddyProduct({ feedback: 'disabled' });
+
+    render(<Titlebar workspaceAvailable={false} />);
+
+    expect(screen.queryByRole('button', { name: 'conversation.welcome.quickActionFeedback' })).not.toBeInTheDocument();
+  });
 });

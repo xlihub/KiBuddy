@@ -129,7 +129,7 @@ export const SETTINGS_REGISTRY = [
   {
     id: 'about',
     path: 'about',
-    featureId: 'system',
+    featureId: 'about',
     productOnly: false,
     desktopOnly: false,
     routePaths: ['/settings/about'],

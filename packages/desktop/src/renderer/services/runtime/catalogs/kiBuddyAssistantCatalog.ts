@@ -4,26 +4,31 @@ import {
   type ProductBuiltinResourceRequirement,
   type ProductBuiltinResourceState,
   type ProductExperience,
+  type KiBuddyProductIntegration,
   type ProductResourceAccess,
   type ProductResourceHiddenRecord,
   type ProductResourceOrigin,
 } from '@/common/platform/ki-buddy';
 import { ipcBridge } from '@/common';
 import type { Assistant } from '@/common/types/agent/assistantTypes';
-import { getProductExperience } from '../kiBuddyRuntime';
+import { getKiBuddyProductRuntime, getProductExperience } from '../kiBuddyRuntime';
 import { KI_BUDDY_ASSISTANT_IDENTITIES, resolveKiBuddyAssistantOrigin } from './kiBuddyAssistantIdentity';
+import { areKiBuddyProductResourceIntegrationsEnabled } from './kiBuddyResourceRegistry';
 
 export { KI_BUDDY_PRODUCT_ASSISTANT_IDS } from './kiBuddyAssistantIdentity';
 
 const KI_CLI_ASSISTANT_IDENTITY = KI_BUDDY_ASSISTANT_IDENTITIES.kiCli;
 
-const PRODUCT_BUILTIN_ASSISTANT_REQUIREMENTS: readonly ProductBuiltinResourceRequirement[] = Object.values(
-  KI_BUDDY_ASSISTANT_IDENTITIES
-).map((definition) => ({
-  featureId: definition.featureId,
-  resourceId: definition.id,
-  resourceName: 'resourceName' in definition ? definition.resourceName : undefined,
-}));
+const productBuiltinAssistantRequirements = (
+  integrations: readonly KiBuddyProductIntegration[]
+): readonly ProductBuiltinResourceRequirement[] =>
+  Object.values(KI_BUDDY_ASSISTANT_IDENTITIES)
+    .filter((definition) => areKiBuddyProductResourceIntegrationsEnabled(definition, integrations))
+    .map((definition) => ({
+      featureId: definition.featureId,
+      resourceId: definition.id,
+      resourceName: 'resourceName' in definition ? definition.resourceName : undefined,
+    }));
 
 export type ProductAssistant = Assistant &
   Readonly<{
@@ -59,17 +64,38 @@ const resolveProductAssistantOrigin = (assistant: Assistant): ProductResourceOri
 /** Applies product access from stable Assistant identity and structured source fields. */
 export const projectProductAssistantCatalog = (
   assistants: readonly Assistant[],
-  experience: ProductExperience
+  experience: ProductExperience,
+  integrations: readonly KiBuddyProductIntegration[] = ['agentsGateway']
 ): ProductAssistantCatalog => {
+  const unavailableProductResources = assistants.flatMap((assistant) => {
+    const definition = Object.values(KI_BUDDY_ASSISTANT_IDENTITIES).find(
+      (candidate) => candidate.id === assistant.id && candidate.source === assistant.source
+    );
+    return definition && !areKiBuddyProductResourceIntegrationsEnabled(definition, integrations)
+      ? [
+          {
+            code: 'product_resource_hidden' as const,
+            kind: 'assistant' as const,
+            resourceId: assistant.id,
+            resourceName: assistant.name,
+            origin: 'productBuiltin' as const,
+            access: 'hidden' as const,
+          },
+        ]
+      : [];
+  });
+  const unavailableResourceIds = new Set(unavailableProductResources.map(({ resourceId }) => resourceId));
   const projection = projectProductResources(
     experience,
     'assistant',
-    assistants.map((assistant) => ({
-      id: assistant.id,
-      name: assistant.name,
-      origin: resolveProductAssistantOrigin(assistant),
-      assistant,
-    }))
+    assistants
+      .filter((assistant) => !unavailableResourceIds.has(assistant.id))
+      .map((assistant) => ({
+        id: assistant.id,
+        name: assistant.name,
+        origin: resolveProductAssistantOrigin(assistant),
+        assistant,
+      }))
   );
   const entries = projection.visible.map(({ resource, access }) => ({
     access,
@@ -80,7 +106,7 @@ export const projectProductAssistantCatalog = (
 
   return {
     entries,
-    hiddenResources: projection.hidden,
+    hiddenResources: [...unavailableProductResources, ...projection.hidden],
     visibleAssistants: entries.map(({ assistant }) => assistant),
   };
 };
@@ -88,7 +114,8 @@ export const projectProductAssistantCatalog = (
 /** Evaluates every required Assistant only after the backend catalog becomes authoritative. */
 export const loadProductBuiltinAssistantResourceState = async (
   experience: ProductExperience = getProductExperience(),
-  requirements: readonly ProductBuiltinResourceRequirement[] = PRODUCT_BUILTIN_ASSISTANT_REQUIREMENTS
+  integrations: readonly KiBuddyProductIntegration[] = getKiBuddyProductRuntime()?.integrations ?? ['agentsGateway'],
+  requirements: readonly ProductBuiltinResourceRequirement[] = productBuiltinAssistantRequirements(integrations)
 ): Promise<ProductBuiltinResourceState> => {
   const pendingState = evaluateProductBuiltinResourceState(experience, 'assistant', {
     availableResourceIds: [],
@@ -98,7 +125,7 @@ export const loadProductBuiltinAssistantResourceState = async (
   if (pendingState.status !== 'pending') return pendingState;
 
   try {
-    const catalog = projectProductAssistantCatalog(await ipcBridge.assistants.list.invoke(), experience);
+    const catalog = projectProductAssistantCatalog(await ipcBridge.assistants.list.invoke(), experience, integrations);
     const availableResourceIds = catalog.entries
       .filter(({ origin }) => origin === 'productBuiltin')
       .map(({ resourceId }) => resourceId);

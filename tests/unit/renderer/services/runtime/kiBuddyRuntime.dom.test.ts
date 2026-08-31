@@ -7,6 +7,7 @@ import {
   getKiBuddyProductRuntime,
   getKiBuddyRendererRuntime,
   getKiBuddyRouteComponents,
+  shouldValidateKiBuddyProductResources,
 } from '@/renderer/services/runtime/kiBuddyRuntime';
 
 const translateKey = (key: string) => key;
@@ -35,6 +36,13 @@ describe('Ki-Buddy renderer runtime selection', () => {
     });
     expect(getProductExperience().featureState('team')).toBe('disabled');
     expect(getKiBuddyRendererRuntime()).toBeNull();
+  });
+
+  it('validates product resources for local identity without an auth API', () => {
+    window.__kiBuddyProductPresentation = { ...KI_BUDDY_PRODUCT_CAPABILITY, integrations: [] };
+
+    expect(getKiBuddyRendererRuntime()).toBeNull();
+    expect(shouldValidateKiBuddyProductResources('authenticated')).toBe(true);
   });
 
   it('activates product routes when product and auth capabilities are both present', () => {

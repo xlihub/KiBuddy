@@ -67,6 +67,7 @@ describe('recover corrupted database preload bridge', () => {
     productBootstrap = {
       status: 'ready',
       productIdentity: 'ki-buddy',
+      identityMode: 'agents',
       capability: KI_BUDDY_PRODUCT_CAPABILITY!,
       error: null,
     };
@@ -111,10 +112,29 @@ describe('recover corrupted database preload bridge', () => {
       productIdentity: 'ki-buddy',
       capability: {
         id: 'ki-buddy',
-        schemaVersion: 3,
+        schemaVersion: 4,
         experience: { features: { team: 'disabled', scheduledTasks: 'enabled' } },
       },
     });
+  });
+
+  it('does not request Agents authentication transport for a local Ki-Buddy identity', async () => {
+    productBootstrap = {
+      status: 'ready',
+      productIdentity: 'ki-buddy',
+      identityMode: 'local',
+      capability: KI_BUDDY_PRODUCT_CAPABILITY!,
+      error: null,
+    };
+
+    await import('@/preload/main');
+
+    const electronApiCall = exposeInMainWorld.mock.calls.find(([key]) => key === 'electronAPI');
+    const electronApi = electronApiCall?.[1] as { kiBuddyAuth?: unknown; kiBuddyCoreTransport?: unknown } | undefined;
+
+    expect(sendSync).not.toHaveBeenCalledWith('ki-buddy:core-transport:get-csrf-token');
+    expect(electronApi?.kiBuddyAuth).toBeUndefined();
+    expect(electronApi?.kiBuddyCoreTransport).toBeUndefined();
   });
 
   it('exposes a recognized Ki-Buddy configuration failure without auth or AionUi capability fallback', async () => {

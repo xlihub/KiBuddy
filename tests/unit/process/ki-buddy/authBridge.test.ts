@@ -20,6 +20,7 @@ const credentialStoreMock = vi.hoisted(() => ({
   clear: vi.fn(),
   load: vi.fn(),
   save: vi.fn(),
+  constructorArgs: vi.fn(),
 }));
 
 vi.mock('electron', () => ({
@@ -45,6 +46,9 @@ vi.mock('electron', () => ({
 
 vi.mock('@/process/ki-buddy/CredentialStore', () => ({
   KeytarCredentialStore: class {
+    constructor(userDataPath: string, options: unknown) {
+      credentialStoreMock.constructorArgs(userDataPath, options);
+    }
     clear = credentialStoreMock.clear;
     load = credentialStoreMock.load;
     save = credentialStoreMock.save;
@@ -139,6 +143,22 @@ describe('Ki-Buddy authentication IPC bridge', () => {
     credentialStoreMock.clear.mockReset();
     credentialStoreMock.load.mockReset();
     credentialStoreMock.save.mockReset();
+    credentialStoreMock.constructorArgs.mockReset();
+  });
+
+  it('passes the registered project credential namespace to the credential store', () => {
+    const coreTransport = new KiBuddyMainCoreTransport('core-csrf-token');
+
+    registerKiBuddyAuthBridge({
+      bootstrapSecret: 'bootstrap-secret',
+      coreTransport,
+      credentialStorageNamespace: 'ki-buddy-zxjt',
+      getCoreBaseUrl: () => 'http://127.0.0.1:39123',
+    });
+
+    expect(credentialStoreMock.constructorArgs).toHaveBeenCalledWith('/tmp/ki-buddy-auth-test', {
+      storageNamespace: 'ki-buddy-zxjt',
+    });
   });
 
   it('installs projected Core cookies while keeping tokens in main', async () => {

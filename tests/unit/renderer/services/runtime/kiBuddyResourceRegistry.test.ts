@@ -16,7 +16,8 @@ const agentsAdapterServerFixture = {
   },
 };
 
-const kiBuddyRuntimeCapability = { id: 'ki-buddy' as const };
+const kiBuddyRuntimeCapability = { id: 'ki-buddy' as const, integrations: ['agentsGateway'] as const };
+const localKiBuddyRuntimeCapability = { id: 'ki-buddy' as const, integrations: [] as const };
 const otherBuiltinAssistant = Object.values(KI_BUDDY_PRODUCT_RESOURCE_REGISTRY.assistant).find(
   ({ id, source }) => source === 'builtin' && id !== KI_BUDDY_PRODUCT_RESOURCE_REGISTRY.assistant.agentsExecution.id
 );
@@ -100,6 +101,34 @@ describe('Ki-Buddy product resource registry', () => {
         ['other-mcp', agentsAdapterServerFixture.id, 'other-mcp']
       )
     ).toEqual(['other-mcp', agentsAdapterServerFixture.id]);
+  });
+
+  it('does not require or inject the Agents Adapter when Agents Gateway is unavailable', () => {
+    expect(
+      resolveKiBuddyAssistantEffectiveMcpServerIds(
+        localKiBuddyRuntimeCapability,
+        {
+          id: KI_BUDDY_PRODUCT_RESOURCE_REGISTRY.assistant.agentsExecution.id,
+          source: KI_BUDDY_PRODUCT_RESOURCE_REGISTRY.assistant.agentsExecution.source,
+        },
+        [agentsAdapterServerFixture],
+        ['other-mcp']
+      )
+    ).toEqual(['other-mcp']);
+  });
+
+  it('removes a selected legacy Agents Adapter when Agents Gateway is unavailable', () => {
+    expect(
+      resolveKiBuddyAssistantEffectiveMcpServerIds(
+        localKiBuddyRuntimeCapability,
+        {
+          id: KI_BUDDY_PRODUCT_RESOURCE_REGISTRY.assistant.agentsExecution.id,
+          source: KI_BUDDY_PRODUCT_RESOURCE_REGISTRY.assistant.agentsExecution.source,
+        },
+        [agentsAdapterServerFixture],
+        ['other-mcp', agentsAdapterServerFixture.id]
+      )
+    ).toEqual(['other-mcp']);
   });
 
   it('does not enforce the product Adapter for a user Assistant with the same id', () => {

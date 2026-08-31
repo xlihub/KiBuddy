@@ -6,7 +6,8 @@ import { deepFreeze } from './experience';
 export function createKiBuddyProductCapability(config: KiBuddyProductConfig): KiBuddyProductCapability {
   return deepFreeze({
     id: 'ki-buddy',
-    schemaVersion: 3,
+    schemaVersion: 4,
+    integrations: config.distribution?.integrations ?? ['agentsGateway'],
     brand: config.brand,
     assets: config.assets.renderer,
     locale: config.locale,

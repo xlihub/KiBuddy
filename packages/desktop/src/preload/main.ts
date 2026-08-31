@@ -19,10 +19,11 @@ import type { KiBuddyAuthApi } from '@/common/types/platform/kiBuddyAuth';
 const productBootstrap = ipcRenderer.sendSync(KI_BUDDY_PRODUCT_BOOTSTRAP_CHANNEL) as KiBuddyProductBootstrap;
 const productIntegrityOnly = productBootstrap.status === 'invalid';
 const kiBuddyRuntimeReady = productBootstrap.status === 'ready';
-const coreCsrfToken = kiBuddyRuntimeReady
+const kiBuddyAgentsIdentityReady = kiBuddyRuntimeReady && productBootstrap.identityMode === 'agents';
+const coreCsrfToken = kiBuddyAgentsIdentityReady
   ? (ipcRenderer.sendSync(KI_BUDDY_CORE_TRANSPORT_CHANNEL) as string | null)
   : null;
-const kiBuddyAuthCapability = kiBuddyRuntimeReady
+const kiBuddyAuthCapability = kiBuddyAgentsIdentityReady
   ? {
       kiBuddyAuth: {
         getSession: () => ipcRenderer.invoke(KI_BUDDY_AUTH_CHANNELS.getSession),
