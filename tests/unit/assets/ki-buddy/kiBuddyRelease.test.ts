@@ -6,6 +6,7 @@ import { tmpdir } from 'node:os';
 import { join, resolve } from 'node:path';
 import { load as loadYaml } from 'js-yaml';
 import sharp from 'sharp';
+import { createProjectPackagingOverlay } from './packagingIdentity.fixture';
 
 const {
   createKiBuddyBuildEvidence,
@@ -17,9 +18,8 @@ const {
   readProductVersion,
   verifyKiBuddyRelease,
   verifyProductPackageJson,
-} = require('../../../packages/shared-scripts/src/kiBuddyRelease');
-
-const projectRoot = resolve(__dirname, '../../..');
+} = require('../../../../packages/shared-scripts/src/kiBuddyRelease');
+const projectRoot = resolve(__dirname, '../../../..');
 
 function readPngDimensions(relativePath: string): { height: number; width: number } {
   const data = readFileSync(join(projectRoot, relativePath));
@@ -484,6 +484,16 @@ describe('Ki-Buddy product release identity', () => {
     expect(effectivePackage.productName).not.toBe(upstreamPackage.productName);
   });
 
+  it('creates effective package metadata from a resolved project packaging overlay', () => {
+    const overlay = createProjectPackagingOverlay();
+
+    expect(createEffectivePackageJson(projectRoot, { packagingOverlay: overlay, version: '3.2.1' })).toMatchObject({
+      ...overlay.packageMetadata,
+      productRuntime: 'ki-buddy',
+      version: '3.2.1',
+    });
+  });
+
   it('generates the final electron-builder overlay without modifying package.json', () => {
     const tempDir = mkdtempSync(join(tmpdir(), 'ki-buddy-builder-config-'));
     const outputPath = join(tempDir, 'electron-builder.json');
@@ -524,6 +534,53 @@ describe('Ki-Buddy product release identity', () => {
         },
       });
       expect(JSON.parse(readFileSync(outputPath, 'utf8'))).toEqual(config);
+      expect(readFileSync(join(projectRoot, 'package.json'), 'utf8')).toBe(originalPackage);
+    } finally {
+      rmSync(tempDir, { recursive: true, force: true });
+    }
+  });
+
+  it('generates electron-builder configuration from a resolved project packaging overlay', () => {
+    const tempDir = mkdtempSync(join(tmpdir(), 'project-builder-config-'));
+    const outputPath = join(tempDir, 'electron-builder.json');
+    const overlay = createProjectPackagingOverlay();
+    const originalPackage = readFileSync(join(projectRoot, 'package.json'), 'utf8');
+    try {
+      const config = createElectronBuilderConfig(projectRoot, outputPath, {
+        packagingOverlay: overlay,
+        version: '3.2.1',
+      });
+
+      expect(config).toMatchObject({
+        ...overlay.desktop,
+        win: { icon: overlay.resources.platform.ico },
+        mac: { icon: overlay.resources.platform.icns },
+        linux: { ...overlay.desktop.linux, icon: overlay.resources.platform.png },
+        extraMetadata: {
+          ...overlay.packageMetadata,
+          productRuntime: overlay.product.runtimeIdentity,
+          version: '3.2.1',
+        },
+      });
+      expect(config.extraResources).toContainEqual({
+        from: overlay.resources.platform.png,
+        to: overlay.resources.packaged.applicationIcon,
+      });
+      expect(config.extraResources).toContainEqual({
+        from: overlay.resources.platform.png,
+        to: overlay.resources.packaged.runtimeIcon,
+      });
+      expect(config.extraResources).toContainEqual({
+        from: 'resources/bundled-aioncore',
+        to: overlay.resources.packaged.bundledAionCore,
+      });
+      expect(JSON.parse(readFileSync(join(tempDir, overlay.resources.packaged.buildEvidence), 'utf8'))).toMatchObject({
+        product: {
+          runtimeIdentity: overlay.product.runtimeIdentity,
+          productName: overlay.desktop.productName,
+        },
+        packagingIdentity: overlay,
+      });
       expect(readFileSync(join(projectRoot, 'package.json'), 'utf8')).toBe(originalPackage);
     } finally {
       rmSync(tempDir, { recursive: true, force: true });

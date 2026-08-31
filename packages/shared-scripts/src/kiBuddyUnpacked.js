@@ -2,7 +2,9 @@ const crypto = require('node:crypto');
 const fs = require('node:fs');
 const path = require('node:path');
 const { execFileSync } = require('node:child_process');
+const { isDeepStrictEqual } = require('node:util');
 const { readProductConfig } = require('./kiBuddyRelease');
+const { resolveKiBuddyPackagingIdentity } = require('./kiBuddyPackagingIdentity');
 
 function requireFile(filePath, label) {
   if (!fs.statSync(filePath, { throwIfNoEntry: false })?.isFile()) {
@@ -30,8 +32,8 @@ function requireRelativePath(value, label) {
   return value;
 }
 
-function resolveManagedNode(resourcesDir, platform) {
-  const bundledRoot = path.join(resourcesDir, 'bundled-aioncore');
+function resolveManagedNode(resourcesDir, platform, bundledAionCorePath) {
+  const bundledRoot = path.join(resourcesDir, bundledAionCorePath);
   const runtimeDirectories = fs
     .readdirSync(bundledRoot, { withFileTypes: true })
     .filter((entry) => entry.isDirectory() && entry.name.startsWith(`${platform}-`));
@@ -83,68 +85,107 @@ function readWindowsProductName(executablePath) {
   ).trim();
 }
 
-function verifyMacIdentity(appPath, productConfig) {
+function verifyMacIdentity(appPath, packagingIdentity) {
   const info = readMacInfoPlist(requireFile(path.join(appPath, 'Contents', 'Info.plist'), 'macOS Info.plist'));
-  if (info.CFBundleDisplayName !== productConfig.brand.productName) {
-    throw new Error('macOS CFBundleDisplayName does not match the Ki-Buddy product name');
+  if (info.CFBundleDisplayName !== packagingIdentity.desktop.productName) {
+    throw new Error('macOS CFBundleDisplayName does not match the expected product name');
   }
-  if (info.CFBundleExecutable !== productConfig.electronBuilder.executableName) {
-    throw new Error('macOS CFBundleExecutable does not match the Ki-Buddy executable name');
+  if (info.CFBundleExecutable !== packagingIdentity.desktop.executableName) {
+    throw new Error('macOS CFBundleExecutable does not match the expected executable name');
   }
   const schemes = (info.CFBundleURLTypes || []).flatMap((entry) => entry.CFBundleURLSchemes || []);
-  const configuredSchemes = productConfig.electronBuilder.protocols.flatMap((protocol) => protocol.schemes);
+  const configuredSchemes = packagingIdentity.desktop.protocols.flatMap((protocol) => protocol.schemes);
   if (JSON.stringify(schemes) !== JSON.stringify(configuredSchemes)) {
-    throw new Error('macOS URL schemes do not contain only the Ki-Buddy protocol');
+    throw new Error('macOS URL schemes do not match the expected packaging identity');
   }
 }
 
+function verifyBuildEvidence(resourcesDir, packagingIdentity, expectsPackagingIdentity) {
+  const evidencePath = requireFile(
+    path.join(resourcesDir, packagingIdentity.resources.packaged.buildEvidence),
+    'Packaging build evidence'
+  );
+  let evidence;
+  try {
+    evidence = JSON.parse(fs.readFileSync(evidencePath, 'utf8'));
+  } catch {
+    throw new Error('Packaging build evidence is invalid JSON');
+  }
+  if (
+    evidence?.schemaVersion !== 2 ||
+    evidence?.product?.runtimeIdentity !== packagingIdentity.product.runtimeIdentity ||
+    evidence?.product?.productName !== packagingIdentity.desktop.productName
+  ) {
+    throw new Error('Packaging build evidence product identity does not match the expected identity');
+  }
+  if (expectsPackagingIdentity && !evidence.packagingIdentity) {
+    throw new Error('Project packaging build evidence is missing its resolved identity');
+  }
+  if (evidence.packagingIdentity && !isDeepStrictEqual(evidence.packagingIdentity, packagingIdentity)) {
+    throw new Error('Packaging build evidence resolved identity does not match the expected identity');
+  }
+  return evidencePath;
+}
+
 /** Verifies product identity in an electron-builder unpacked output. */
-function verifyKiBuddyUnpacked(projectRoot, unpackedPath, platform = process.platform) {
+function verifyKiBuddyUnpacked(projectRoot, unpackedPath, platform = process.platform, expectedIdentity) {
   const productConfig = readProductConfig(projectRoot);
+  const expectsPackagingIdentity = expectedIdentity !== undefined;
+  const packagingIdentity = resolveKiBuddyPackagingIdentity(productConfig, expectedIdentity);
   const absoluteInput = path.resolve(unpackedPath);
-  const productIcon = path.join(projectRoot, productConfig.assets.platform.png);
+  const productIcon = path.join(projectRoot, packagingIdentity.resources.platform.png);
   let applicationRoot;
   let resourcesDir;
   let executablePath;
 
   if (platform === 'darwin') {
-    applicationRoot = resolveMacApp(absoluteInput, productConfig.brand.productName);
+    applicationRoot = resolveMacApp(absoluteInput, packagingIdentity.desktop.productName);
     resourcesDir = path.join(applicationRoot, 'Contents', 'Resources');
-    executablePath = path.join(applicationRoot, 'Contents', 'MacOS', productConfig.electronBuilder.executableName);
-    verifyMacIdentity(applicationRoot, productConfig);
+    executablePath = path.join(applicationRoot, 'Contents', 'MacOS', packagingIdentity.desktop.executableName);
+    verifyMacIdentity(applicationRoot, packagingIdentity);
   } else {
     applicationRoot = absoluteInput;
     resourcesDir = path.join(applicationRoot, 'resources');
     executablePath = path.join(
       applicationRoot,
-      `${productConfig.electronBuilder.executableName}${platform === 'win32' ? '.exe' : ''}`
+      `${packagingIdentity.desktop.executableName}${platform === 'win32' ? '.exe' : ''}`
     );
   }
 
-  requireFile(executablePath, `${platform} Ki-Buddy executable`);
-  requireMatchingFile(productIcon, path.join(resourcesDir, 'app.png'), `${platform} application icon`);
+  requireFile(executablePath, `${platform} packaged executable`);
   requireMatchingFile(
     productIcon,
-    path.join(resourcesDir, productConfig.assets.packaged.icon),
+    path.join(resourcesDir, packagingIdentity.resources.packaged.applicationIcon),
+    `${platform} application icon`
+  );
+  requireMatchingFile(
+    productIcon,
+    path.join(resourcesDir, packagingIdentity.resources.packaged.runtimeIcon),
     `${platform} runtime icon`
   );
   const agentsMcpAdapterPath = requireFile(
-    path.join(resourcesDir, 'app.asar.unpacked', 'out', 'main', 'builtin-mcp-agents.js'),
+    path.join(resourcesDir, packagingIdentity.resources.packaged.agentsMcpAdapter),
     `${platform} Agents MCP Adapter`
   );
-  const managedNodePath = resolveManagedNode(resourcesDir, platform);
+  const managedNodePath = resolveManagedNode(
+    resourcesDir,
+    platform,
+    packagingIdentity.resources.packaged.bundledAionCore
+  );
+  const buildEvidencePath = verifyBuildEvidence(resourcesDir, packagingIdentity, expectsPackagingIdentity);
 
-  if (platform === 'win32' && readWindowsProductName(executablePath) !== productConfig.brand.productName) {
-    throw new Error('Windows executable ProductName does not match the Ki-Buddy product name');
+  if (platform === 'win32' && readWindowsProductName(executablePath) !== packagingIdentity.desktop.productName) {
+    throw new Error('Windows executable ProductName does not match the expected product name');
   }
 
   return {
     agentsMcpAdapterPath,
     applicationRoot,
+    buildEvidencePath,
     executablePath,
     managedNodePath,
     platform,
-    productName: productConfig.brand.productName,
+    productName: packagingIdentity.desktop.productName,
   };
 }
 

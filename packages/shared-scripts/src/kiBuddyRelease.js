@@ -5,6 +5,7 @@ const { execFileSync } = require('node:child_process');
 const { isDeepStrictEqual } = require('node:util');
 const yaml = require('js-yaml');
 const { readKiCorePin } = require('./kiCoreRelease');
+const { resolveKiBuddyPackagingIdentity } = require('./kiBuddyPackagingIdentity');
 const productExperienceRegistry = require('../../desktop/src/common/platform/ki-buddy/experience/registry.json');
 
 const KI_BUDDY_PRODUCT = 'Ki-Buddy';
@@ -452,6 +453,7 @@ function createSourceStateSha256(projectRoot) {
 /** Writes immutable evidence tying one packaged client to its product policy sources and source commit. */
 function createKiBuddyBuildEvidence(projectRoot, outputPath, options = {}) {
   const productConfig = readProductConfig(projectRoot);
+  const packagingIdentity = resolveKiBuddyPackagingIdentity(productConfig, options.packagingOverlay);
   const sourceCommit = String(
     options.commit ||
       execFileSync('git', ['rev-parse', 'HEAD'], {
@@ -478,9 +480,10 @@ function createKiBuddyBuildEvidence(projectRoot, outputPath, options = {}) {
   const evidence = {
     schemaVersion: 2,
     product: {
-      runtimeIdentity: productConfig.runtimeIdentity,
-      productName: productConfig.brand.productName,
+      runtimeIdentity: packagingIdentity.product.runtimeIdentity,
+      productName: packagingIdentity.desktop.productName,
     },
+    ...(options.packagingOverlay ? { packagingIdentity } : {}),
     source: {
       repository: productConfig.source.repository,
       commit: sourceCommit,
@@ -509,27 +512,45 @@ function createKiBuddyBuildEvidence(projectRoot, outputPath, options = {}) {
   return evidence;
 }
 
+/**
+ * Creates package metadata for one resolved Ki-Buddy packaging identity without modifying the root package.json.
+ * @param {string} projectRoot Repository root containing the Ki-Buddy product configuration.
+ * @param {{ packagingOverlay?: object, version?: string }} [options] Optional resolved identity and package version.
+ * @returns {object} Effective package metadata consumed by electron-builder.
+ */
 function createEffectivePackageJson(projectRoot, options = {}) {
   const upstreamPackage = readJson(path.join(projectRoot, 'package.json'), 'AionUi package.json');
   const productConfig = readProductConfig(projectRoot);
+  const packagingIdentity = resolveKiBuddyPackagingIdentity(productConfig, options.packagingOverlay);
   const version = options.version || readProductVersion(projectRoot);
   if (!PACKAGE_VERSION_PATTERN.test(version)) throw new Error('Effective Ki-Buddy package version must be SemVer');
   return {
     ...upstreamPackage,
-    ...productConfig.packageMetadata,
-    productRuntime: productConfig.runtimeIdentity,
+    ...packagingIdentity.packageMetadata,
+    productRuntime: packagingIdentity.product.runtimeIdentity,
     version,
   };
 }
 
+/**
+ * Writes the electron-builder configuration and evidence for one resolved Ki-Buddy packaging identity.
+ * @param {string} projectRoot Repository root containing product and upstream builder configuration.
+ * @param {string} outputPath Destination for the generated electron-builder JSON configuration.
+ * @param {{ commit?: string, packagingOverlay?: object, version?: string }} [options] Packaging inputs.
+ * @returns {object} Generated electron-builder configuration.
+ */
 function createElectronBuilderConfig(projectRoot, outputPath, options = {}) {
   const productConfig = readProductConfig(projectRoot);
-  for (const [kind, relativePath] of Object.entries(productConfig.assets.platform)) {
+  const packagingIdentity = resolveKiBuddyPackagingIdentity(productConfig, options.packagingOverlay);
+  for (const [kind, relativePath] of Object.entries(packagingIdentity.resources.platform)) {
     if (!fs.existsSync(path.join(projectRoot, relativePath))) {
-      throw new Error(`Ki-Buddy platform asset ${kind} does not exist: ${relativePath}`);
+      throw new Error(`Packaging platform asset ${kind} does not exist: ${relativePath}`);
     }
   }
-  const effectivePackage = createEffectivePackageJson(projectRoot, options);
+  const effectivePackage = createEffectivePackageJson(projectRoot, {
+    ...options,
+    packagingOverlay: packagingIdentity,
+  });
   const upstreamBuilderPath = path.join(projectRoot, 'packages/desktop/electron-builder.yml');
   const upstreamBuilderConfig = yaml.load(fs.readFileSync(upstreamBuilderPath, 'utf8'));
   if (!upstreamBuilderConfig || typeof upstreamBuilderConfig !== 'object' || Array.isArray(upstreamBuilderConfig)) {
@@ -538,32 +559,41 @@ function createElectronBuilderConfig(projectRoot, outputPath, options = {}) {
   const upstreamExtraResources = Array.isArray(upstreamBuilderConfig.extraResources)
     ? upstreamBuilderConfig.extraResources
     : [];
-  const productExtraResources = upstreamExtraResources.map((resource) =>
-    resource && typeof resource === 'object' && resource.to === 'app.png'
-      ? Object.assign({}, resource, { from: productConfig.assets.platform.png })
-      : resource
-  );
-  if (productConfig.assets.packaged.icon !== 'app.png') {
+  const defaultIdentity = resolveKiBuddyPackagingIdentity(productConfig);
+  const productExtraResources = upstreamExtraResources.map((resource) => {
+    if (!resource || typeof resource !== 'object') return resource;
+    if (resource.to === defaultIdentity.resources.packaged.applicationIcon) {
+      return Object.assign({}, resource, {
+        from: packagingIdentity.resources.platform.png,
+        to: packagingIdentity.resources.packaged.applicationIcon,
+      });
+    }
+    return resource;
+  });
+  if (packagingIdentity.resources.packaged.runtimeIcon !== packagingIdentity.resources.packaged.applicationIcon) {
     productExtraResources.push({
-      from: productConfig.assets.platform.png,
-      to: productConfig.assets.packaged.icon,
+      from: packagingIdentity.resources.platform.png,
+      to: packagingIdentity.resources.packaged.runtimeIcon,
     });
   }
-  const buildEvidencePath = path.join(path.dirname(outputPath), 'ki-buddy-build-evidence.json');
-  createKiBuddyBuildEvidence(projectRoot, buildEvidencePath, { commit: options.commit });
+  const buildEvidencePath = path.join(path.dirname(outputPath), packagingIdentity.resources.packaged.buildEvidence);
+  createKiBuddyBuildEvidence(projectRoot, buildEvidencePath, {
+    commit: options.commit,
+    ...(options.packagingOverlay ? { packagingOverlay: packagingIdentity } : {}),
+  });
   productExtraResources.push({
     from: buildEvidencePath,
-    to: 'ki-buddy-build-evidence.json',
+    to: packagingIdentity.resources.packaged.buildEvidence,
   });
   const config = {
     ...upstreamBuilderConfig,
-    ...productConfig.electronBuilder,
-    win: { ...upstreamBuilderConfig.win, icon: productConfig.assets.platform.ico },
-    mac: { ...upstreamBuilderConfig.mac, icon: productConfig.assets.platform.icns },
+    ...packagingIdentity.desktop,
+    win: { ...upstreamBuilderConfig.win, icon: packagingIdentity.resources.platform.ico },
+    mac: { ...upstreamBuilderConfig.mac, icon: packagingIdentity.resources.platform.icns },
     linux: {
       ...upstreamBuilderConfig.linux,
-      ...productConfig.electronBuilder.linux,
-      icon: productConfig.assets.platform.png,
+      ...packagingIdentity.desktop.linux,
+      icon: packagingIdentity.resources.platform.png,
     },
     extraResources: productExtraResources,
     extraMetadata: Object.fromEntries(
