@@ -1,5 +1,5 @@
 {
-  "schemaVersion": 1,
+  "schemaVersion": 2,
   "distributionId": "zxjt",
   "version": "0.1.0",
   "baseline": {
@@ -14,7 +14,10 @@
   "identityMode": "local",
   "integrations": [],
   "disabledFeatures": ["account", "about", "feedback", "githubResources"],
-  "platforms": ["macos-arm64"],
+  "platforms": {
+    "preview": ["macos-arm64"],
+    "formal": ["windows-x64", "windows-arm64"]
+  },
   "resources": {
     "png": "resources/ki-buddy/app.png",
     "ico": "resources/ki-buddy/app.ico",

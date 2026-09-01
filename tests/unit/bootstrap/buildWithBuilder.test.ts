@@ -129,6 +129,8 @@ childProcess.execSync = function mockedExecSync(command) {
     const hookPath = join(tempDir, 'hook.cjs');
     const callsPath = join(tempDir, 'vite-calls.txt');
     const planPath = join(tempDir, 'project-build-plan.json');
+    const currentPlatform =
+      process.platform === 'darwin' ? 'macos' : process.platform === 'win32' ? 'windows' : 'linux';
 
     writeFileSync(
       hookPath,
@@ -160,7 +162,11 @@ childProcess.execSync = function mockedExecSync(command) {
 `,
       'utf8'
     );
-    writeFileSync(planPath, JSON.stringify({ schemaVersion: 1, mode: 'preview' }), 'utf8');
+    writeFileSync(
+      planPath,
+      JSON.stringify({ schemaVersion: 1, mode: 'preview', platforms: [`${currentPlatform}-arm64`] }),
+      'utf8'
+    );
 
     let movedExistingOut = false;
     try {

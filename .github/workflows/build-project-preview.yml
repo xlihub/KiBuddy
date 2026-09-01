@@ -50,10 +50,11 @@ concurrency:
 jobs:
   validate:
     if: inputs.mode == 'preview'
-    runs-on: macos-14
+    runs-on: ubuntu-latest
     timeout-minutes: 10
     outputs:
       registration_revision: ${{ steps.resolve.outputs.registration_revision }}
+      matrix: ${{ steps.resolve.outputs.matrix }}
     env:
       BUILD_PLAN: ${{ github.workspace }}/validated/project-build-plan.json
     steps:
@@ -83,25 +84,30 @@ jobs:
         env:
           DISTRIBUTION_ID: ${{ inputs.distribution_id }}
           SOURCE_SHA: ${{ inputs.source_sha }}
-          PROJECT_PLATFORM: macos-arm64
         run: |
           set -euo pipefail
           [[ "$DISTRIBUTION_ID" =~ ^[a-z0-9]+(-[a-z0-9]+)*$ ]]
           [[ "$SOURCE_SHA" =~ ^[0-9a-f]{40}$ ]]
           test "$(git -C source rev-parse HEAD)" = "$SOURCE_SHA"
           test "$(node -p "require('./source/distribution-manifest.json').distributionId")" = "$DISTRIBUTION_ID"
+          platforms_json="$(node -p "JSON.stringify(require('./source/distribution-manifest.json').platforms.preview)")"
           registration_revision="$(git -C trusted rev-parse HEAD)"
           node trusted/packages/shared-scripts/src/projectDistribution.js resolve \
             --registry trusted/distributions/registry.json \
             --manifest source/distribution-manifest.json \
             --product-config trusted/ki-buddy-product.json \
-            --platform "$PROJECT_PLATFORM" \
+            --platforms-json "$platforms_json" \
             --source-sha "$SOURCE_SHA" \
             --registration-revision "$registration_revision" \
             --output "$BUILD_PLAN"
           baseline="$(node -p "require('./validated/project-build-plan.json').baseline.commit")"
           git -C source merge-base --is-ancestor "$baseline" "$SOURCE_SHA"
+          node trusted/packages/shared-scripts/src/projectDistribution.js create-build-matrix \
+            --build-plan "$BUILD_PLAN" \
+            --output validated/matrix.json
+          matrix="$(tr -d '\n' < validated/matrix.json)"
           printf 'registration_revision=%s\n' "$registration_revision" >> "$GITHUB_OUTPUT"
+          printf 'matrix=%s\n' "$matrix" >> "$GITHUB_OUTPUT"
 
       - name: Upload immutable validation plan
         uses: actions/upload-artifact@v6
@@ -114,12 +120,22 @@ jobs:
   build:
     if: inputs.mode == 'preview'
     needs: validate
-    runs-on: macos-14
+    runs-on: ${{ matrix.os }}
     timeout-minutes: 60
+    strategy:
+      fail-fast: false
+      matrix: ${{ fromJSON(needs.validate.outputs.matrix) }}
     env:
       KI_BUDDY_RESOLVED_BUILD_PLAN: ${{ github.workspace }}/validated/project-build-plan.json
       AIONUI_BACKEND_SOURCE_POLICY: release-pinned
     steps:
+      - name: Checkout trusted project build setup
+        uses: actions/checkout@v6
+        with:
+          ref: ${{ needs.validate.outputs.registration_revision }}
+          path: trusted
+          persist-credentials: false
+
       - name: Checkout requested project source
         uses: actions/checkout@v6
         with:
@@ -134,39 +150,44 @@ jobs:
           name: project-plan-${{ github.run_id }}-${{ github.run_attempt }}
           path: validated
 
-      - name: Set up Node.js
-        uses: actions/setup-node@v4
+      - name: Prepare project build dependencies
+        uses: ./trusted/.github/actions/setup-project-build
         with:
-          node-version: '22'
+          platform: ${{ matrix.platform }}
+          arch: ${{ matrix.arch }}
+          source-directory: ${{ github.workspace }}/source
 
-      - name: Set up Bun
-        uses: oven-sh/setup-bun@v2
-        with:
-          bun-version: latest
-
-      - name: Install project dependencies
+      - name: Build preview package
         working-directory: source
-        run: bun install --frozen-lockfile
+        run: ${{ matrix.command }}
 
-      - name: Build macOS arm64 preview
-        working-directory: source
-        run: node scripts/build-with-builder.js arm64 --mac --arm64
-
-      - name: Upload unverified preview candidate
+      - name: Upload unverified preview installer
         uses: actions/upload-artifact@v6
         with:
-          name: project-candidate-${{ github.run_id }}-${{ github.run_attempt }}
+          name: project-candidate-installer-${{ github.run_id }}-${{ github.run_attempt }}-${{ matrix.platform }}
           if-no-files-found: error
           retention-days: 1
           path: |
             source/out/*.dmg
-            source/out/project-distribution/project-build-evidence.json
+            source/out/*.exe
+            source/out/*.deb
+
+      - name: Upload unverified preview evidence
+        uses: actions/upload-artifact@v6
+        with:
+          name: project-candidate-evidence-${{ github.run_id }}-${{ github.run_attempt }}-${{ matrix.platform }}
+          if-no-files-found: error
+          retention-days: 1
+          path: source/out/project-distribution/project-build-evidence.json
 
   verify:
     if: inputs.mode == 'preview'
     needs: [validate, build]
-    runs-on: macos-14
+    runs-on: ${{ matrix.os }}
     timeout-minutes: 15
+    strategy:
+      fail-fast: false
+      matrix: ${{ fromJSON(needs.validate.outputs.matrix) }}
     env:
       VALIDATED_PLAN: ${{ github.workspace }}/validated/project-build-plan.json
       EXPECTED_PLAN: ${{ github.workspace }}/expected/project-build-plan.json
@@ -197,78 +218,63 @@ jobs:
           name: project-plan-${{ github.run_id }}-${{ github.run_attempt }}
           path: validated
 
-      - name: Download unverified preview candidate
+      - name: Download unverified preview installer
         uses: actions/download-artifact@v7
         with:
-          name: project-candidate-${{ github.run_id }}-${{ github.run_attempt }}
+          name: project-candidate-installer-${{ github.run_id }}-${{ github.run_attempt }}-${{ matrix.platform }}
+          path: candidate
+
+      - name: Download unverified preview evidence
+        uses: actions/download-artifact@v7
+        with:
+          name: project-candidate-evidence-${{ github.run_id }}-${{ github.run_attempt }}-${{ matrix.platform }}
           path: candidate
 
       - name: Re-resolve expected plan from trusted sources
         shell: bash
         env:
           SOURCE_SHA: ${{ inputs.source_sha }}
-          PROJECT_PLATFORM: macos-arm64
           REGISTRATION_REVISION: ${{ needs.validate.outputs.registration_revision }}
         run: |
           set -euo pipefail
+          platforms_json="$(node -p "JSON.stringify(require('./source/distribution-manifest.json').platforms.preview)")"
           node trusted/packages/shared-scripts/src/projectDistribution.js resolve \
             --registry trusted/distributions/registry.json \
             --manifest source/distribution-manifest.json \
             --product-config trusted/ki-buddy-product.json \
-            --platform "$PROJECT_PLATFORM" \
+            --platforms-json "$platforms_json" \
             --source-sha "$SOURCE_SHA" \
             --registration-revision "$REGISTRATION_REVISION" \
             --output "$EXPECTED_PLAN"
           cmp "$VALIDATED_PLAN" "$EXPECTED_PLAN"
 
-      - name: Verify the exact DMG and packaged evidence
-        shell: bash
-        run: |
-          set -euo pipefail
-          dmg_count="$(find candidate -type f -name '*.dmg' -print | wc -l | tr -d ' ')"
-          test "$dmg_count" = 1
-          dmg_path="$(find candidate -type f -name '*.dmg' -print -quit)"
-          evidence_count="$(find candidate -type f -name 'project-build-evidence.json' -print | wc -l | tr -d ' ')"
-          test "$evidence_count" = 1
-          standalone_evidence="$(find candidate -type f -name 'project-build-evidence.json' -print -quit)"
-          mount_point="$RUNNER_TEMP/project-preview-dmg"
-          mkdir -p "$mount_point" verified
-          hdiutil attach "$dmg_path" -nobrowse -readonly -mountpoint "$mount_point"
-          cleanup() { hdiutil detach "$mount_point" >/dev/null; }
-          trap cleanup EXIT
-          app_count="$(find "$mount_point" -maxdepth 2 -type d -name '*.app' -print | wc -l | tr -d ' ')"
-          test "$app_count" = 1
-          app_path="$(find "$mount_point" -maxdepth 2 -type d -name '*.app' -print -quit)"
-          node trusted/packages/shared-scripts/src/projectDistribution.js verify-unpacked \
-            --project-root source \
-            --path "$app_path" \
-            --platform darwin \
-            --build-plan "$EXPECTED_PLAN"
-          packaged_evidence="$app_path/Contents/Resources/project-distribution/project-build-evidence.json"
-          cmp "$standalone_evidence" "$packaged_evidence"
-          cp "$standalone_evidence" verified/project-build-evidence.json
-          shasum -a 256 "$dmg_path" > verified/project-preview-dmg.sha256
-          hdiutil detach "$mount_point"
-          trap - EXIT
+      - name: Verify preview platform artifact
+        run: >-
+          node trusted/packages/shared-scripts/src/projectDistribution.js verify-artifact
+          --project-root source
+          --artifacts-root candidate
+          --platform ${{ matrix.platform }}
+          --build-plan expected/project-build-plan.json
+          --output-directory verified/${{ matrix.platform }}
 
       - name: Upload verified preview package and immutable evidence
         uses: actions/upload-artifact@v6
         with:
-          name: ki-buddy-${{ inputs.distribution_id }}-${{ inputs.source_sha }}-macos-arm64-preview
+          name: ki-buddy-${{ inputs.distribution_id }}-${{ inputs.source_sha }}-${{ matrix.platform }}-preview
           if-no-files-found: error
           retention-days: 7
           path: |
-            candidate/**/*.dmg
+            verified/${{ matrix.platform }}/installers/
             expected/project-build-plan.json
-            verified/project-build-evidence.json
-            verified/project-preview-dmg.sha256
+            verified/${{ matrix.platform }}/project-build-evidence.json
 
   formal_validate:
     if: inputs.mode == 'formal'
-    runs-on: macos-14
+    runs-on: ubuntu-latest
     timeout-minutes: 15
     outputs:
       registration_revision: ${{ steps.resolve.outputs.registration_revision }}
+      matrix: ${{ steps.resolve.outputs.matrix }}
     env:
       BUILD_PLAN: ${{ github.workspace }}/validated/project-build-plan.json
       GITHUB_TOKEN: ${{ github.token }}
@@ -304,7 +310,6 @@ jobs:
           KI_CORE_SOURCE_POLICY: ${{ inputs.ki_core_source_policy }}
           KI_CORE_CANDIDATE_RUN_ID: ${{ inputs.ki_core_candidate_run_id }}
           KI_CORE_CANDIDATE_HEAD_SHA: ${{ inputs.ki_core_candidate_head_sha }}
-          PROJECT_PLATFORM: macos-arm64
         run: |
           set -euo pipefail
           test "$GITHUB_REF" = 'refs/heads/product/main'
@@ -314,9 +319,9 @@ jobs:
           test "$(git -C source rev-parse HEAD)" = "$SOURCE_SHA"
           test "$(node -p "require('./source/distribution-manifest.json').distributionId")" = "$DISTRIBUTION_ID"
           test "$(node -p "require('./source/distribution-manifest.json').version")" = "$PROJECT_VERSION"
+          platforms_json="$(node -p "JSON.stringify(require('./source/distribution-manifest.json').platforms.formal)")"
 
           SOURCE_BRANCH="distribution/$DISTRIBUTION_ID"
-          git -C source fetch --no-tags origin "$SOURCE_BRANCH:refs/remotes/origin/$SOURCE_BRANCH"
           node trusted/packages/shared-scripts/src/projectDistribution.js verify-source-reachability \
             --repository source \
             --source-sha "$SOURCE_SHA" \
@@ -342,7 +347,7 @@ jobs:
             --delivery-records trusted/distributions/delivery-records.json
             --product-config trusted/ki-buddy-product.json
             --mode formal
-            --platform "$PROJECT_PLATFORM"
+            --platforms-json "$platforms_json"
             --source-sha "$SOURCE_SHA"
             --source-branch "$SOURCE_BRANCH"
             --source-reachability validated/source-reachability.json
@@ -363,10 +368,17 @@ jobs:
             candidate)
               [[ "$KI_CORE_CANDIDATE_RUN_ID" =~ ^[1-9][0-9]*$ ]]
               [[ "$KI_CORE_CANDIDATE_HEAD_SHA" =~ ^[0-9a-f]{40}$ ]]
-              node trusted/packages/shared-scripts/src/projectDistribution.js resolve-ki-core-candidate \
-                --platform "$PROJECT_PLATFORM" \
-                --run-id "$KI_CORE_CANDIDATE_RUN_ID" \
-                --head-sha "$KI_CORE_CANDIDATE_HEAD_SHA" \
+              mkdir -p validated/ki-core-candidates
+              while read -r platform; do
+                node trusted/packages/shared-scripts/src/projectDistribution.js resolve-ki-core-candidate \
+                  --platform "$platform" \
+                  --run-id "$KI_CORE_CANDIDATE_RUN_ID" \
+                  --head-sha "$KI_CORE_CANDIDATE_HEAD_SHA" \
+                  --output "validated/ki-core-candidates/$platform.json"
+              done < <(node -e "for (const platform of JSON.parse(process.argv[1])) console.log(platform)" "$platforms_json")
+              node trusted/packages/shared-scripts/src/projectDistribution.js merge-ki-core-candidates \
+                --platforms-json "$platforms_json" \
+                --directory validated/ki-core-candidates \
                 --output validated/ki-core-candidate-provenance.json
               node trusted/packages/shared-scripts/src/projectDistribution.js resolve \
                 "${common_args[@]}" \
@@ -380,7 +392,11 @@ jobs:
 
           baseline="$(node -p "require('./validated/project-build-plan.json').baseline.commit")"
           git -C source merge-base --is-ancestor "$baseline" "$SOURCE_SHA"
+          node trusted/packages/shared-scripts/src/projectDistribution.js create-build-matrix \
+            --build-plan "$BUILD_PLAN" \
+            --output validated/build-matrix.json
           printf 'registration_revision=%s\n' "$registration_revision" >> "$GITHUB_OUTPUT"
+          printf 'matrix=%s\n' "$(cat validated/build-matrix.json)" >> "$GITHUB_OUTPUT"
 
       - name: Upload immutable formal build plan
         uses: actions/upload-artifact@v6
@@ -393,14 +409,24 @@ jobs:
   formal_build:
     if: inputs.mode == 'formal'
     needs: formal_validate
-    runs-on: macos-14
+    runs-on: ${{ matrix.os }}
     timeout-minutes: 60
+    strategy:
+      fail-fast: false
+      matrix: ${{ fromJSON(needs.formal_validate.outputs.matrix) }}
     env:
       KI_BUDDY_RESOLVED_BUILD_PLAN: ${{ github.workspace }}/validated/project-build-plan.json
       AIONUI_BACKEND_SOURCE_POLICY: ${{ inputs.ki_core_source_policy }}
       AIONUI_BACKEND_RUN_ID: ${{ inputs.ki_core_candidate_run_id }}
       AIONUI_BACKEND_EXPECTED_SHA: ${{ inputs.ki_core_candidate_head_sha }}
     steps:
+      - name: Checkout trusted project build setup
+        uses: actions/checkout@v6
+        with:
+          ref: ${{ needs.formal_validate.outputs.registration_revision }}
+          path: trusted
+          persist-credentials: false
+
       - name: Checkout requested project source
         uses: actions/checkout@v6
         with:
@@ -415,39 +441,44 @@ jobs:
           name: project-formal-plan-${{ github.run_id }}-${{ github.run_attempt }}
           path: validated
 
-      - name: Set up Node.js
-        uses: actions/setup-node@v4
+      - name: Prepare project build dependencies
+        uses: ./trusted/.github/actions/setup-project-build
         with:
-          node-version: '22'
+          platform: ${{ matrix.platform }}
+          arch: ${{ matrix.arch }}
+          source-directory: ${{ github.workspace }}/source
 
-      - name: Set up Bun
-        uses: oven-sh/setup-bun@v2
-        with:
-          bun-version: latest
-
-      - name: Install project dependencies
+      - name: Build formal package
         working-directory: source
-        run: bun install --frozen-lockfile
+        run: ${{ matrix.command }}
 
-      - name: Build macOS arm64 formal package
-        working-directory: source
-        run: node scripts/build-with-builder.js arm64 --mac --arm64
-
-      - name: Upload unverified formal build
+      - name: Upload unverified formal installer
         uses: actions/upload-artifact@v6
         with:
-          name: project-formal-build-${{ github.run_id }}-${{ github.run_attempt }}
+          name: project-formal-installer-${{ github.run_id }}-${{ github.run_attempt }}-${{ matrix.platform }}
           if-no-files-found: error
           retention-days: 1
           path: |
             source/out/*.dmg
-            source/out/project-distribution/project-build-evidence.json
+            source/out/*.exe
+            source/out/*.deb
+
+      - name: Upload unverified formal evidence
+        uses: actions/upload-artifact@v6
+        with:
+          name: project-formal-evidence-${{ github.run_id }}-${{ github.run_attempt }}-${{ matrix.platform }}
+          if-no-files-found: error
+          retention-days: 1
+          path: source/out/project-distribution/project-build-evidence.json
 
   formal_verify:
     if: inputs.mode == 'formal'
     needs: [formal_validate, formal_build]
-    runs-on: macos-14
+    runs-on: ${{ matrix.os }}
     timeout-minutes: 15
+    strategy:
+      fail-fast: false
+      matrix: ${{ fromJSON(needs.formal_validate.outputs.matrix) }}
     steps:
       - name: Checkout exact trusted registration revision
         uses: actions/checkout@v6
@@ -475,46 +506,71 @@ jobs:
           name: project-formal-plan-${{ github.run_id }}-${{ github.run_attempt }}
           path: validated
 
-      - name: Download unverified formal build
+      - name: Download unverified formal installer
         uses: actions/download-artifact@v7
         with:
-          name: project-formal-build-${{ github.run_id }}-${{ github.run_attempt }}
+          name: project-formal-installer-${{ github.run_id }}-${{ github.run_attempt }}-${{ matrix.platform }}
           path: candidate
 
-      - name: Verify formal package and create candidate record
-        shell: bash
-        run: |
-          set -euo pipefail
-          dmg_count="$(find candidate -type f -name '*.dmg' -print | wc -l | tr -d ' ')"
-          test "$dmg_count" = 1
-          dmg_path="$(find candidate -type f -name '*.dmg' -print -quit)"
-          evidence_count="$(find candidate -type f -name 'project-build-evidence.json' -print | wc -l | tr -d ' ')"
-          test "$evidence_count" = 1
-          standalone_evidence="$(find candidate -type f -name 'project-build-evidence.json' -print -quit)"
-          mount_point="$RUNNER_TEMP/project-formal-dmg"
-          mkdir -p "$mount_point" verified
-          hdiutil attach "$dmg_path" -nobrowse -readonly -mountpoint "$mount_point"
-          cleanup() { hdiutil detach "$mount_point" >/dev/null; }
-          trap cleanup EXIT
-          app_count="$(find "$mount_point" -maxdepth 2 -type d -name '*.app' -print | wc -l | tr -d ' ')"
-          test "$app_count" = 1
-          app_path="$(find "$mount_point" -maxdepth 2 -type d -name '*.app' -print -quit)"
-          node trusted/packages/shared-scripts/src/projectDistribution.js verify-unpacked \
-            --project-root source \
-            --path "$app_path" \
-            --platform darwin \
-            --build-plan validated/project-build-plan.json
-          packaged_evidence="$app_path/Contents/Resources/project-distribution/project-build-evidence.json"
-          cmp "$standalone_evidence" "$packaged_evidence"
-          cp "$standalone_evidence" verified/project-build-evidence.json
-          node trusted/packages/shared-scripts/src/projectDistribution.js create-candidate \
-            --build-plan validated/project-build-plan.json \
-            --installer "$dmg_path" \
-            --platform macos-arm64 \
-            --output verified/project-candidate.json
-          shasum -a 256 "$dmg_path" > verified/project-formal-dmg.sha256
-          hdiutil detach "$mount_point"
-          trap - EXIT
+      - name: Download unverified formal evidence
+        uses: actions/download-artifact@v7
+        with:
+          name: project-formal-evidence-${{ github.run_id }}-${{ github.run_attempt }}-${{ matrix.platform }}
+          path: candidate
+
+      - name: Verify formal platform artifact
+        run: >-
+          node trusted/packages/shared-scripts/src/projectDistribution.js verify-artifact
+          --project-root source
+          --artifacts-root candidate
+          --platform ${{ matrix.platform }}
+          --build-plan validated/project-build-plan.json
+          --output-directory verified/${{ matrix.platform }}
+
+      - name: Upload verified formal platform
+        uses: actions/upload-artifact@v6
+        with:
+          name: project-formal-verified-${{ github.run_id }}-${{ github.run_attempt }}-${{ matrix.platform }}
+          if-no-files-found: error
+          retention-days: 1
+          path: verified/${{ matrix.platform }}/
+
+  formal_finalize:
+    if: inputs.mode == 'formal'
+    needs: [formal_validate, formal_verify]
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - name: Checkout exact trusted registration revision
+        uses: actions/checkout@v6
+        with:
+          ref: ${{ needs.formal_validate.outputs.registration_revision }}
+          path: trusted
+          persist-credentials: false
+
+      - name: Set up Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+
+      - name: Download immutable formal build plan
+        uses: actions/download-artifact@v7
+        with:
+          name: project-formal-plan-${{ github.run_id }}-${{ github.run_attempt }}
+          path: validated
+
+      - name: Download every verified formal platform
+        uses: actions/download-artifact@v7
+        with:
+          pattern: project-formal-verified-${{ github.run_id }}-${{ github.run_attempt }}-*
+          path: verified-platforms
+
+      - name: Create atomic formal candidate
+        run: >-
+          node trusted/packages/shared-scripts/src/projectDistribution.js create-candidate
+          --build-plan validated/project-build-plan.json
+          --verifications verified-platforms
+          --output verified/project-candidate.json
 
       - name: Upload formal candidate attempt
         uses: actions/upload-artifact@v6
@@ -523,8 +579,8 @@ jobs:
           if-no-files-found: error
           retention-days: 30
           path: |
-            candidate/**/*.dmg
+            verified-platforms/**/installers/*
+            verified-platforms/**/project-build-evidence.json
+            verified-platforms/**/project-platform-verification.json
             validated/project-build-plan.json
-            verified/project-build-evidence.json
             verified/project-candidate.json
-            verified/project-formal-dmg.sha256

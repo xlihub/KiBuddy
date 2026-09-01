@@ -6,7 +6,7 @@
   "additionalProperties": false,
   "required": ["schemaVersion", "registrations"],
   "properties": {
-    "schemaVersion": { "const": 1 },
+    "schemaVersion": { "const": 2 },
     "registrations": {
       "type": "array",
       "items": {
@@ -31,13 +31,31 @@
             "additionalProperties": false,
             "required": [
               "platforms",
+              "requiredPlatforms",
               "integrations",
               "disabledFeatures",
               "nonSensitiveConfigKeys",
               "buildCredentialNames"
             ],
             "properties": {
-              "platforms": { "type": "array", "items": { "type": "string" }, "uniqueItems": true },
+              "platforms": {
+                "type": "object",
+                "additionalProperties": false,
+                "required": ["preview", "formal"],
+                "properties": {
+                  "preview": { "type": "array", "items": { "type": "string" }, "uniqueItems": true },
+                  "formal": { "type": "array", "items": { "type": "string" }, "uniqueItems": true }
+                }
+              },
+              "requiredPlatforms": {
+                "type": "object",
+                "additionalProperties": false,
+                "required": ["preview", "formal"],
+                "properties": {
+                  "preview": { "type": "array", "items": { "type": "string" }, "uniqueItems": true },
+                  "formal": { "type": "array", "items": { "type": "string" }, "uniqueItems": true }
+                }
+              },
               "integrations": { "type": "array", "items": { "type": "string" }, "uniqueItems": true },
               "disabledFeatures": { "type": "array", "items": { "type": "string" }, "uniqueItems": true },
               "nonSensitiveConfigKeys": { "type": "array", "items": { "type": "string" }, "uniqueItems": true },

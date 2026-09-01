@@ -2,6 +2,7 @@ const crypto = require('node:crypto');
 const { execFileSync } = require('node:child_process');
 const fs = require('node:fs');
 const path = require('node:path');
+const { listFilesRecursively, requireSinglePath } = require('./artifactFiles');
 const { resolveKiBuddyPackagingIdentity } = require('./kiBuddyPackagingIdentity');
 
 const REGISTRATION_SCHEMA = require('../../../distributions/schemas/registration.schema.json');
@@ -26,7 +27,57 @@ const IDENTITY_KEYS = [
   'credentialNamespace',
 ];
 const UNIQUE_IDENTITY_KEYS = IDENTITY_KEYS.filter((key) => key !== 'applicationName');
-const SUPPORTED_PLATFORMS = ['macos-arm64'];
+const PROJECT_PLATFORM_CONFIG = {
+  'macos-x64': {
+    os: 'macos-14',
+    arch: 'x64',
+    runtimePlatform: 'darwin',
+    command: 'node scripts/build-with-builder.js x64 --mac --x64',
+    installerExtension: '.dmg',
+    unpackedDirectory: 'mac',
+  },
+  'macos-arm64': {
+    os: 'macos-14',
+    arch: 'arm64',
+    runtimePlatform: 'darwin',
+    command: 'node scripts/build-with-builder.js arm64 --mac --arm64',
+    installerExtension: '.dmg',
+    unpackedDirectory: 'mac-arm64',
+  },
+  'windows-x64': {
+    os: 'windows-2022',
+    arch: 'x64',
+    runtimePlatform: 'win32',
+    command: 'node scripts/build-with-builder.js x64 --win --x64',
+    installerExtension: '.exe',
+    unpackedDirectory: 'win-unpacked',
+  },
+  'windows-arm64': {
+    os: 'windows-11-arm',
+    arch: 'arm64',
+    runtimePlatform: 'win32',
+    command: 'node scripts/build-with-builder.js arm64 --win --arm64',
+    installerExtension: '.exe',
+    unpackedDirectory: 'win-arm64-unpacked',
+  },
+  'linux-x64': {
+    os: 'ubuntu-latest',
+    arch: 'x64',
+    runtimePlatform: 'linux',
+    command: 'node scripts/build-with-builder.js x64 --linux --x64',
+    installerExtension: '.deb',
+    unpackedDirectory: 'linux-unpacked',
+  },
+  'linux-arm64': {
+    os: 'ubuntu-24.04-arm',
+    arch: 'arm64',
+    runtimePlatform: 'linux',
+    command: 'node scripts/build-with-builder.js arm64 --linux --arm64',
+    installerExtension: '.deb',
+    unpackedDirectory: 'linux-arm64-unpacked',
+  },
+};
+const SUPPORTED_PLATFORMS = Object.keys(PROJECT_PLATFORM_CONFIG);
 const SUPPORTED_INTEGRATIONS = ['agentsGateway'];
 const AIONUI_RESERVED_IDENTITY = {
   appId: 'com.aionui.app',
@@ -93,6 +144,16 @@ function requireUniqueStrings(value, label) {
   return value;
 }
 
+function requireModePlatformPolicy(value, label) {
+  const policy = requireExactKeys(value, ['preview', 'formal'], `${label} mode policy`);
+  for (const mode of ['preview', 'formal']) {
+    requireUniqueStrings(policy[mode], `${label} ${mode}`).forEach((platform) =>
+      requireEnum(platform, SUPPORTED_PLATFORMS, `${label} ${mode}`)
+    );
+  }
+  return policy;
+}
+
 function requireSafeRelativePath(value, label) {
   requireString(value, label);
   if (path.isAbsolute(value) || value.split(/[\\/]/u).includes('..')) {
@@ -150,7 +211,9 @@ function reserveIdentity(seenIdentityValues, identity, label) {
 
 function validateRegistry(value, baseProductConfig) {
   const registry = requireSchemaKeys(value, REGISTRATION_SCHEMA, 'Project distribution registry');
-  if (registry.schemaVersion !== 1) throw new Error('Unsupported project distribution registry schema');
+  if (registry.schemaVersion !== 2) {
+    throw new Error('Unsupported project distribution registry schema');
+  }
   if (!Array.isArray(registry.registrations)) throw new Error('Project distribution registrations must be an array');
 
   const registrationKeys = REGISTRATION_SCHEMA.properties.registrations.items.required;
@@ -199,12 +262,23 @@ function validateRegistry(value, baseProductConfig) {
     }
     const allowed = requireExactKeys(
       registration.allowed,
-      ['platforms', 'integrations', 'disabledFeatures', 'nonSensitiveConfigKeys', 'buildCredentialNames'],
+      [
+        'platforms',
+        'requiredPlatforms',
+        'integrations',
+        'disabledFeatures',
+        'nonSensitiveConfigKeys',
+        'buildCredentialNames',
+      ],
       'Project allowed scope'
     );
-    requireUniqueStrings(allowed.platforms, 'Project allowed platforms').forEach((platform) =>
-      requireEnum(platform, SUPPORTED_PLATFORMS, 'Project allowed platform')
-    );
+    const allowedPlatforms = requireModePlatformPolicy(allowed.platforms, 'Project allowed platforms');
+    const requiredPlatforms = requireModePlatformPolicy(allowed.requiredPlatforms, 'Project required platforms');
+    for (const mode of ['preview', 'formal']) {
+      if (requiredPlatforms[mode].some((platform) => !allowedPlatforms[mode].includes(platform))) {
+        throw new Error(`Project required platforms ${mode} must be allowed`);
+      }
+    }
     requireUniqueStrings(allowed.integrations, 'Project allowed integrations').forEach((integration) =>
       requireEnum(integration, SUPPORTED_INTEGRATIONS, 'Project allowed integration')
     );
@@ -241,7 +315,9 @@ function requireNonSensitiveConfig(value, label = 'Project manifest nonSensitive
 
 function validateManifest(value) {
   const manifest = requireSchemaKeys(value, MANIFEST_SCHEMA, 'Project distribution manifest');
-  if (manifest.schemaVersion !== 1) throw new Error('Unsupported project distribution manifest schema');
+  if (manifest.schemaVersion !== 2) {
+    throw new Error('Unsupported project distribution manifest schema');
+  }
   if (!DISTRIBUTION_ID_PATTERN.test(manifest.distributionId)) {
     throw new Error('Project manifest distributionId must be a lowercase kebab-case slug');
   }
@@ -266,9 +342,7 @@ function validateManifest(value) {
   for (const [kind, resourcePath] of Object.entries(resources)) {
     requireSafeRelativePath(resourcePath, `Project manifest resource ${kind}`);
   }
-  requireUniqueStrings(manifest.platforms, 'Project manifest platforms').forEach((platform) =>
-    requireEnum(platform, SUPPORTED_PLATFORMS, 'Project manifest platform')
-  );
+  requireModePlatformPolicy(manifest.platforms, 'Project manifest platforms');
   return manifest;
 }
 
@@ -405,14 +479,77 @@ function createProjectKiCoreCandidateProvenance(result, platform) {
     candidate: {
       workflow: source.workflow,
       runId: Number(source.runId),
-      artifactName: source.artifactName,
+      artifacts: { [platform]: source.artifactName },
     },
   };
-  validateKiCore(normalized, platform);
+  validateKiCore(normalized, [platform]);
   if (source.headSha !== normalized.commit || source.version !== normalized.version) {
     throw new Error('Ki-Core candidate source does not match its source metadata');
   }
   return deepFreeze(normalized);
+}
+
+function selectImmutableKiCoreCandidateSource(value) {
+  return {
+    sourcePolicy: value.sourcePolicy,
+    repository: value.repository,
+    version: value.version,
+    tag: value.tag,
+    commit: value.commit,
+    aionCore: value.aionCore,
+    workflow: value.candidate.workflow,
+    runId: value.candidate.runId,
+  };
+}
+
+/** Combines per-platform Ki-Core candidate artifacts after proving their immutable source metadata is identical. */
+function mergeProjectKiCoreCandidateProvenance(provenances, requestedPlatforms) {
+  const platforms = requireUniqueStrings(requestedPlatforms, 'Requested Ki-Core candidate platforms');
+  if (platforms.length === 0) throw new Error('At least one Ki-Core candidate platform must be requested');
+  if (!Array.isArray(provenances) || provenances.length !== platforms.length) {
+    throw new Error('Ki-Core candidate provenance must cover every requested platform');
+  }
+  const byPlatform = new Map();
+  for (const provenance of provenances) {
+    const checksumPlatforms = Object.keys(requireRecord(provenance?.checksums, 'Ki-Core candidate checksums'));
+    if (checksumPlatforms.length !== 1) {
+      throw new Error('Each Ki-Core candidate provenance must identify exactly one platform');
+    }
+    const platform = checksumPlatforms[0];
+    validateKiCore(provenance, [platform]);
+    if (byPlatform.has(platform)) throw new Error(`Duplicate Ki-Core candidate platform: ${platform}`);
+    byPlatform.set(platform, provenance);
+  }
+  if (platforms.some((platform) => !byPlatform.has(platform))) {
+    throw new Error('Ki-Core candidate provenance must cover every requested platform');
+  }
+  const first = byPlatform.get(platforms[0]);
+  for (const platform of platforms.slice(1)) {
+    if (
+      digestJson(selectImmutableKiCoreCandidateSource(byPlatform.get(platform))) !==
+      digestJson(selectImmutableKiCoreCandidateSource(first))
+    ) {
+      throw new Error('Ki-Core candidate provenance must remain consistent across selected platforms');
+    }
+  }
+  return deepFreeze({
+    sourcePolicy: first.sourcePolicy,
+    repository: first.repository,
+    version: first.version,
+    tag: first.tag,
+    commit: first.commit,
+    aionCore: clone(first.aionCore),
+    checksums: Object.fromEntries(
+      platforms.map((platform) => [platform, byPlatform.get(platform).checksums[platform]])
+    ),
+    candidate: {
+      workflow: first.candidate.workflow,
+      runId: first.candidate.runId,
+      artifacts: Object.fromEntries(
+        platforms.map((platform) => [platform, byPlatform.get(platform).candidate.artifacts[platform]])
+      ),
+    },
+  });
 }
 
 /**
@@ -471,16 +608,10 @@ function verifyFormalSourceReachability(repositoryPath, sourceSha, sourceBranch)
   }
 }
 
-/**
- * Creates a candidate record after a formal package has passed independent verification.
- * @param {object} buildPlan Validated formal project build plan.
- * @param {{platform: string, fileName: string, checksum: string}} installer Verified installer identity.
- * @returns {object} Immutable project distribution candidate record.
- * @throws {Error} When the plan or installer does not satisfy the formal candidate contract.
- */
-function createProjectDistributionCandidateRecord(buildPlan, installer) {
+/** Creates one platform verification after its installer and unpacked application pass independent checks. */
+function createProjectDistributionPlatformVerification(buildPlan, installer) {
   if (buildPlan?.schemaVersion !== 1 || buildPlan?.mode !== 'formal') {
-    throw new Error('Project candidate requires a validated formal build plan');
+    throw new Error('Project platform verification requires a validated formal build plan');
   }
   const artifact = requireExactKeys(installer, ['platform', 'fileName', 'checksum'], 'Project candidate installer');
   if (!buildPlan.platforms.includes(artifact.platform)) {
@@ -488,6 +619,79 @@ function createProjectDistributionCandidateRecord(buildPlan, installer) {
   }
   requireString(artifact.fileName, 'Project candidate installer file name');
   if (!SHA256_PATTERN.test(artifact.checksum)) throw new Error('Project candidate installer checksum must be SHA-256');
+  return deepFreeze({
+    schemaVersion: 1,
+    kind: 'project-distribution-platform-verification',
+    buildPlanDigest: digestJson(buildPlan),
+    platform: artifact.platform,
+    artifact: { fileName: artifact.fileName, checksum: artifact.checksum },
+    attempt: clone(buildPlan.candidate),
+    provenance: {
+      distributionId: buildPlan.distributionId,
+      version: buildPlan.version,
+      sourceCommit: buildPlan.source.commit,
+      registrationRevision: buildPlan.registration.revision,
+      manifestDigest: buildPlan.manifest.digest,
+      baselineCommit: buildPlan.baseline.commit,
+      kiCoreDigest: digestJson(buildPlan.kiCore),
+    },
+  });
+}
+
+/** Creates an atomic candidate only after all selected platform verifications agree with one formal plan. */
+function createProjectDistributionCandidateRecord(buildPlan, platformVerifications) {
+  if (buildPlan?.schemaVersion !== 1 || buildPlan?.mode !== 'formal') {
+    throw new Error('Project candidate requires a validated formal build plan');
+  }
+  if (!Array.isArray(platformVerifications)) {
+    throw new Error('Project candidate platform verifications must be an array');
+  }
+  const expectedPlanDigest = digestJson(buildPlan);
+  const expectedProvenance = {
+    distributionId: buildPlan.distributionId,
+    version: buildPlan.version,
+    sourceCommit: buildPlan.source.commit,
+    registrationRevision: buildPlan.registration.revision,
+    manifestDigest: buildPlan.manifest.digest,
+    baselineCommit: buildPlan.baseline.commit,
+    kiCoreDigest: digestJson(buildPlan.kiCore),
+  };
+  const byPlatform = new Map();
+  for (const value of platformVerifications) {
+    const verification = requireExactKeys(
+      value,
+      ['schemaVersion', 'kind', 'buildPlanDigest', 'platform', 'artifact', 'attempt', 'provenance'],
+      'Project platform verification'
+    );
+    if (
+      verification.schemaVersion !== 1 ||
+      verification.kind !== 'project-distribution-platform-verification' ||
+      verification.buildPlanDigest !== expectedPlanDigest ||
+      digestJson(verification.provenance) !== digestJson(expectedProvenance) ||
+      digestJson(verification.attempt) !== digestJson(buildPlan.candidate)
+    ) {
+      throw new Error('Project platform verification provenance does not match the shared build plan');
+    }
+    if (!buildPlan.platforms.includes(verification.platform) || byPlatform.has(verification.platform)) {
+      throw new Error('Project candidate platform verifications must cover every selected platform exactly once');
+    }
+    const artifact = requireExactKeys(
+      verification.artifact,
+      ['fileName', 'checksum'],
+      'Project platform verification artifact'
+    );
+    requireString(artifact.fileName, 'Project candidate installer file name');
+    if (!SHA256_PATTERN.test(artifact.checksum)) {
+      throw new Error('Project candidate installer checksum must be SHA-256');
+    }
+    byPlatform.set(verification.platform, artifact);
+  }
+  if (
+    byPlatform.size !== buildPlan.platforms.length ||
+    buildPlan.platforms.some((platform) => !byPlatform.has(platform))
+  ) {
+    throw new Error('Project candidate platform verifications must cover every selected platform');
+  }
   return deepFreeze({
     schemaVersion: 1,
     kind: 'project-distribution-candidate',
@@ -499,12 +703,20 @@ function createProjectDistributionCandidateRecord(buildPlan, installer) {
     manifest: clone(buildPlan.manifest),
     deliveryHistory: clone(buildPlan.deliveryHistory),
     baseline: clone(buildPlan.baseline),
-    installer: clone(artifact),
+    platforms: [...buildPlan.platforms],
+    identity: {
+      appId: buildPlan.packagingIdentity.desktop.appId,
+      executableName: buildPlan.packagingIdentity.desktop.executableName,
+      protocolSchemes: buildPlan.packagingIdentity.desktop.protocols.flatMap((protocol) => protocol.schemes),
+      dataDirectory: buildPlan.runtimeIdentity.dataDirectory,
+      credentialNamespace: buildPlan.runtimeIdentity.credentialNamespace,
+    },
+    artifacts: buildPlan.platforms.map((platform) => ({ platform, ...clone(byPlatform.get(platform)) })),
     kiCore: clone(buildPlan.kiCore),
   });
 }
 
-function validateKiCore(value, platform) {
+function validateKiCore(value, platforms) {
   const sourcePolicy = value?.sourcePolicy ?? 'release-pinned';
   const keys =
     sourcePolicy === 'candidate'
@@ -519,22 +731,29 @@ function validateKiCore(value, platform) {
   requireString(aionCore.tag, 'AionCore tag');
   if (!SHA40_PATTERN.test(aionCore.peeledCommit)) throw new Error('AionCore commit must be a full lowercase SHA');
   const checksums = requireRecord(kiCore.checksums, 'Ki-Core checksums');
-  if (!SHA256_PATTERN.test(checksums[platform] ?? '')) {
-    throw new Error(`Ki-Core checksum for ${platform} is missing or invalid`);
+  for (const platform of platforms) {
+    if (!SHA256_PATTERN.test(checksums[platform] ?? '')) {
+      throw new Error(`Ki-Core checksum for ${platform} is missing or invalid`);
+    }
   }
   if (sourcePolicy === 'release-pinned') {
     requireString(kiCore.tag, 'Ki-Core tag');
     if (!/^ki-core-v(0|[1-9]\d*)\.(0|[1-9]\d*)\.(0|[1-9]\d*)$/u.test(kiCore.tag)) {
       throw new Error('Ki-Core release tag must use ki-core-vX.Y.Z');
     }
-    return { ...kiCore, sourcePolicy, version: kiCore.tag.slice('ki-core-v'.length) };
+    return {
+      ...kiCore,
+      sourcePolicy,
+      version: kiCore.tag.slice('ki-core-v'.length),
+      checksums: Object.fromEntries(platforms.map((platform) => [platform, checksums[platform]])),
+    };
   }
   if (!SEMVER_PATTERN.test(kiCore.version) || kiCore.tag !== null) {
     throw new Error('Ki-Core candidate must identify its version without a release tag');
   }
   const candidate = requireExactKeys(
     kiCore.candidate,
-    ['workflow', 'runId', 'artifactName'],
+    ['workflow', 'runId', 'artifacts'],
     'Ki-Core candidate provenance'
   );
   if (candidate.workflow !== 'build-manual.yml') {
@@ -543,10 +762,34 @@ function validateKiCore(value, platform) {
   if (!Number.isSafeInteger(candidate.runId) || candidate.runId <= 0) {
     throw new Error('Ki-Core candidate runId must be a positive integer');
   }
-  if (candidate.artifactName !== `ki-core-candidate-${platform}`) {
-    throw new Error(`Ki-Core candidate artifact must be ki-core-candidate-${platform}`);
+  const artifacts = requireRecord(candidate.artifacts, 'Ki-Core candidate artifacts');
+  if (
+    Object.keys(artifacts).length !== platforms.length ||
+    platforms.some((platform) => artifacts[platform] !== `ki-core-candidate-${platform}`)
+  ) {
+    throw new Error('Ki-Core candidate artifacts must cover every selected platform');
   }
-  return kiCore;
+  return {
+    ...kiCore,
+    checksums: Object.fromEntries(platforms.map((platform) => [platform, checksums[platform]])),
+    candidate: {
+      ...candidate,
+      artifacts: Object.fromEntries(platforms.map((platform) => [platform, artifacts[platform]])),
+    },
+  };
+}
+
+function createProjectDistributionBuildMatrix(buildPlan) {
+  if (buildPlan?.schemaVersion !== 1 || !['preview', 'formal'].includes(buildPlan?.mode)) {
+    throw new Error('Project build matrix requires a validated project build plan');
+  }
+  return deepFreeze({
+    include: buildPlan.platforms.map((platform) => {
+      const config = PROJECT_PLATFORM_CONFIG[platform];
+      if (!config) throw new Error(`Unsupported project build platform: ${platform}`);
+      return { platform, ...clone(config) };
+    }),
+  });
 }
 
 function createPackagingIdentity(baseProductConfig, manifest, identity) {
@@ -667,9 +910,28 @@ function resolveProjectDistributionBuildPlan(input) {
   }
   const requestedPlatforms = requireUniqueStrings(request.requestedPlatforms, 'Requested project platforms');
   if (requestedPlatforms.length === 0) throw new Error('At least one project platform must be requested');
+  const manifestPlatforms = requireModePlatformPolicy(manifest.platforms, 'Project manifest platforms')[request.mode];
+  const allowedPlatforms = requireModePlatformPolicy(registration.allowed.platforms, 'Project allowed platforms')[
+    request.mode
+  ];
+  const requiredPlatforms = requireModePlatformPolicy(
+    registration.allowed.requiredPlatforms,
+    'Project required platforms'
+  )[request.mode];
   for (const platform of requestedPlatforms) {
-    if (!manifest.platforms.includes(platform) || !registration.allowed.platforms.includes(platform)) {
+    if (!manifestPlatforms.includes(platform) || !allowedPlatforms.includes(platform)) {
       throw new Error(`Requested project platform ${platform} is not allowed`);
+    }
+  }
+  if (
+    requestedPlatforms.length !== manifestPlatforms.length ||
+    manifestPlatforms.some((platform) => !requestedPlatforms.includes(platform))
+  ) {
+    throw new Error('Requested project platforms must exactly match the manifest platform set for the selected mode');
+  }
+  for (const platform of requiredPlatforms) {
+    if (!requestedPlatforms.includes(platform)) {
+      throw new Error(`Required project platform ${platform} must be requested`);
     }
   }
   const requestedCredentialNames =
@@ -698,8 +960,7 @@ function resolveProjectDistributionBuildPlan(input) {
   }
   const candidate = request.mode === 'formal' ? validateCandidateAttempt(request.candidate) : null;
   const identity = registration.identities[request.mode];
-  const platform = requestedPlatforms[0];
-  const kiCore = validateKiCore(request.kiCore, platform);
+  const kiCore = validateKiCore(request.kiCore, requestedPlatforms);
   const packagingIdentity = createPackagingIdentity(baseProductConfig, manifest, identity);
   const productConfig = createEffectiveProductConfig(baseProductConfig, manifest, registration, identity, request.mode);
 
@@ -749,8 +1010,7 @@ function resolveProjectDistributionBuildPlan(input) {
       tag: kiCore.tag,
       commit: kiCore.commit,
       aionCore: clone(kiCore.aionCore),
-      platform,
-      checksum: kiCore.checksums[platform],
+      checksums: clone(kiCore.checksums),
       ...(kiCore.candidate ? { candidate: clone(kiCore.candidate) } : {}),
     },
   });
@@ -764,6 +1024,107 @@ function readJson(filePath, label) {
       cause: error,
     });
   }
+}
+
+function findDirectoriesRecursively(rootPath, baseName) {
+  if (!fs.existsSync(rootPath)) return [];
+  const matches = [];
+  for (const entry of fs.readdirSync(rootPath, { withFileTypes: true })) {
+    if (!entry.isDirectory()) continue;
+    const entryPath = path.join(rootPath, entry.name);
+    if (entry.name === baseName) matches.push(entryPath);
+    matches.push(...findDirectoriesRecursively(entryPath, baseName));
+  }
+  return matches;
+}
+
+function sha256File(filePath) {
+  return crypto.createHash('sha256').update(fs.readFileSync(filePath)).digest('hex');
+}
+
+function verifyProjectDistributionArtifact({
+  buildPlan,
+  projectRoot,
+  artifactsRoot,
+  platform,
+  outputDirectory,
+  materializeInstaller,
+  verifyUnpacked,
+  verifyWindowsInstallation,
+}) {
+  if (buildPlan?.schemaVersion !== 1 || !['preview', 'formal'].includes(buildPlan.mode)) {
+    throw new Error('Project artifact verification requires a validated build plan');
+  }
+  if (!buildPlan.platforms.includes(platform)) {
+    throw new Error(`Project artifact platform ${platform} is not selected by the build plan`);
+  }
+  const config = PROJECT_PLATFORM_CONFIG[platform];
+  if (!config) throw new Error(`Unsupported project artifact platform: ${platform}`);
+  const unpackedDirectories = findDirectoriesRecursively(artifactsRoot, config.unpackedDirectory);
+  const installerPath = requireSinglePath(
+    listFilesRecursively(artifactsRoot).filter(
+      (filePath) =>
+        filePath.endsWith(config.installerExtension) &&
+        unpackedDirectories.every((directory) => !filePath.startsWith(`${directory}${path.sep}`))
+    ),
+    `${platform} installer`
+  );
+  const standaloneEvidencePath = requireSinglePath(
+    listFilesRecursively(artifactsRoot).filter(
+      (filePath) =>
+        path.basename(filePath) === 'project-build-evidence.json' &&
+        unpackedDirectories.every((directory) => !filePath.startsWith(`${directory}${path.sep}`))
+    ),
+    `${platform} standalone build evidence`
+  );
+  const unpackedVerification = require('./kiBuddyUnpacked');
+  const materialized = (materializeInstaller ?? unpackedVerification.materializeKiBuddyInstaller)(
+    installerPath,
+    platform,
+    buildPlan.packagingIdentity
+  );
+  try {
+    const verification = (verifyUnpacked ?? unpackedVerification.verifyKiBuddyUnpacked)(
+      path.resolve(projectRoot),
+      materialized.unpackedPath,
+      config.runtimePlatform,
+      buildPlan.packagingIdentity,
+      buildPlan,
+      materialized.packageRoot,
+      { expectedPlatform: platform }
+    );
+    if (config.runtimePlatform === 'win32') {
+      (verifyWindowsInstallation ?? unpackedVerification.verifyKiBuddyWindowsInstallation)(
+        materialized.unpackedPath,
+        buildPlan.packagingIdentity,
+        platform
+      );
+    }
+    if (!fs.readFileSync(standaloneEvidencePath).equals(fs.readFileSync(verification.buildEvidencePath))) {
+      throw new Error('Standalone project build evidence does not match the packaged evidence');
+    }
+  } finally {
+    materialized.cleanup();
+  }
+  fs.mkdirSync(path.join(outputDirectory, 'installers'), { recursive: true });
+  const copiedInstallerPath = path.join(outputDirectory, 'installers', path.basename(installerPath));
+  fs.copyFileSync(installerPath, copiedInstallerPath);
+  fs.copyFileSync(standaloneEvidencePath, path.join(outputDirectory, 'project-build-evidence.json'));
+  const installer = {
+    platform,
+    fileName: path.basename(installerPath),
+    checksum: sha256File(installerPath),
+  };
+  const platformVerification =
+    buildPlan.mode === 'formal' ? createProjectDistributionPlatformVerification(buildPlan, installer) : null;
+  if (platformVerification) {
+    fs.writeFileSync(
+      path.join(outputDirectory, 'project-platform-verification.json'),
+      `${JSON.stringify(platformVerification, null, 2)}\n`,
+      'utf8'
+    );
+  }
+  return deepFreeze({ installer, verifiedFromInstaller: true });
 }
 
 function runCli() {
@@ -791,11 +1152,12 @@ function runCli() {
   }
   if (command === 'resolve-ki-core-candidate') {
     const platform = value('--platform');
-    if (platform !== 'macos-arm64') throw new Error('Formal project candidates currently support macos-arm64 only');
+    const platformConfig = PROJECT_PLATFORM_CONFIG[platform];
+    if (!platformConfig) throw new Error(`Unsupported formal project candidate platform: ${platform}`);
     const { downloadAndVerifyCandidate } = require('./prepare-aioncore');
     const result = downloadAndVerifyCandidate(
-      'darwin',
-      'arm64',
+      platformConfig.runtimePlatform,
+      platformConfig.arch,
       value('--run-id'),
       value('--head-sha'),
       (process.env.KI_CORE_ACTIONS_TOKEN || '').trim()
@@ -808,6 +1170,27 @@ function runCli() {
     } finally {
       if (result.tempDir) fs.rmSync(result.tempDir, { recursive: true, force: true });
     }
+    return;
+  }
+  if (command === 'merge-ki-core-candidates') {
+    const platforms = JSON.parse(value('--platforms-json'));
+    const directory = path.resolve(value('--directory'));
+    const provenances = platforms.map((platform) =>
+      readJson(path.join(directory, `${platform}.json`), `${platform} Ki-Core candidate provenance`)
+    );
+    const provenance = mergeProjectKiCoreCandidateProvenance(provenances, platforms);
+    const outputPath = path.resolve(value('--output'));
+    fs.mkdirSync(path.dirname(outputPath), { recursive: true });
+    fs.writeFileSync(outputPath, `${JSON.stringify(provenance, null, 2)}\n`, 'utf8');
+    return;
+  }
+  if (command === 'create-build-matrix') {
+    const matrix = createProjectDistributionBuildMatrix(
+      readJson(value('--build-plan'), 'resolved project distribution build plan')
+    );
+    const outputPath = path.resolve(value('--output'));
+    fs.mkdirSync(path.dirname(outputPath), { recursive: true });
+    fs.writeFileSync(outputPath, `${JSON.stringify(matrix)}\n`, 'utf8');
     return;
   }
   if (command === 'resolve-branch-rules') {
@@ -831,21 +1214,42 @@ function runCli() {
   }
   if (command === 'create-candidate') {
     const buildPlan = readJson(value('--build-plan'), 'resolved project distribution build plan');
-    const installerPath = path.resolve(value('--installer'));
-    const checksum = crypto.createHash('sha256').update(fs.readFileSync(installerPath)).digest('hex');
-    const record = createProjectDistributionCandidateRecord(buildPlan, {
-      platform: value('--platform'),
-      fileName: path.basename(installerPath),
-      checksum,
-    });
+    const artifactsRoot = path.resolve(value('--verifications'));
+    const platformVerifications = listFilesRecursively(artifactsRoot)
+      .filter((filePath) => path.basename(filePath) === 'project-platform-verification.json')
+      .map((filePath) => readJson(filePath, 'project platform verification'));
+    for (const verification of platformVerifications) {
+      const installerPath = requireSinglePath(
+        listFilesRecursively(artifactsRoot).filter(
+          (filePath) => path.basename(filePath) === verification.artifact.fileName
+        ),
+        `${verification.platform} verified installer`
+      );
+      if (sha256File(installerPath) !== verification.artifact.checksum) {
+        throw new Error(`Verified installer checksum mismatch for ${verification.platform}`);
+      }
+    }
+    const record = createProjectDistributionCandidateRecord(buildPlan, platformVerifications);
     const outputPath = path.resolve(value('--output'));
     fs.mkdirSync(path.dirname(outputPath), { recursive: true });
     fs.writeFileSync(outputPath, `${JSON.stringify(record, null, 2)}\n`, 'utf8');
     return;
   }
+  if (command === 'verify-artifact') {
+    const buildPlan = readJson(value('--build-plan'), 'resolved project distribution build plan');
+    const result = verifyProjectDistributionArtifact({
+      buildPlan,
+      projectRoot: path.resolve(value('--project-root')),
+      artifactsRoot: path.resolve(value('--artifacts-root')),
+      platform: value('--platform'),
+      outputDirectory: path.resolve(value('--output-directory')),
+    });
+    process.stdout.write(`${JSON.stringify(result, null, 2)}\n`);
+    return;
+  }
   if (command !== 'resolve') throw new Error(`Unsupported project distribution command: ${command}`);
   const productConfig = readJson(value('--product-config'), 'Ki-Buddy product configuration');
-  const platform = value('--platform');
+  const requestedPlatforms = JSON.parse(value('--platforms-json'));
   const modeIndex = args.indexOf('--mode');
   const mode = modeIndex === -1 ? 'preview' : args[modeIndex + 1];
   const isFormal = mode === 'formal';
@@ -885,7 +1289,7 @@ function runCli() {
     mode,
     source,
     registrationRevision: value('--registration-revision'),
-    requestedPlatforms: [platform],
+    requestedPlatforms,
     kiCore:
       isFormal && args.includes('--ki-core-provenance')
         ? readJson(value('--ki-core-provenance'), 'verified Ki-Core provenance')
@@ -907,8 +1311,12 @@ if (require.main === module) {
 
 module.exports = {
   createFormalBranchRulesetEvidence,
+  createProjectDistributionBuildMatrix,
   createProjectDistributionCandidateRecord,
+  createProjectDistributionPlatformVerification,
   createProjectKiCoreCandidateProvenance,
+  mergeProjectKiCoreCandidateProvenance,
   resolveProjectDistributionBuildPlan,
   verifyFormalSourceReachability,
+  verifyProjectDistributionArtifact,
 };

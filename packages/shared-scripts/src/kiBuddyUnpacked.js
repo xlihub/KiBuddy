@@ -1,8 +1,9 @@
-const crypto = require('node:crypto');
 const fs = require('node:fs');
+const os = require('node:os');
 const path = require('node:path');
 const { execFileSync } = require('node:child_process');
 const { isDeepStrictEqual } = require('node:util');
+const { listFilesRecursively, requireSinglePath } = require('./artifactFiles');
 const { readProductConfig } = require('./kiBuddyRelease');
 const { resolveKiBuddyPackagingIdentity } = require('./kiBuddyPackagingIdentity');
 
@@ -13,15 +14,18 @@ function requireFile(filePath, label) {
   return filePath;
 }
 
-function sha256(filePath) {
-  return crypto.createHash('sha256').update(fs.readFileSync(filePath)).digest('hex');
-}
-
-function requireMatchingFile(expectedPath, actualPath, label) {
-  requireFile(expectedPath, `${label} source`);
-  requireFile(actualPath, `${label} packaged resource`);
-  if (sha256(expectedPath) !== sha256(actualPath)) {
-    throw new Error(`${label} does not match the configured Ki-Buddy product resource`);
+function requirePackagedResource(sourcePath, packagedPath, label) {
+  for (const [filePath, kind] of [
+    [sourcePath, 'source'],
+    [packagedPath, 'packaged resource'],
+  ]) {
+    requireFile(filePath, `${label} ${kind}`);
+    if (fs.statSync(filePath).size === 0) {
+      throw new Error(`${label} ${kind} must not be empty`);
+    }
+  }
+  if (!fs.readFileSync(sourcePath).equals(fs.readFileSync(packagedPath))) {
+    throw new Error(`${label} must use the configured project resource`);
   }
 }
 
@@ -63,12 +67,21 @@ function resolveManagedNode(runtimeDirectory, platform) {
   return requireFile(path.join(managedResourcesDir, nodeRoot, nodeExecutable), `${platform} managed Node executable`);
 }
 
-function verifyKiCoreProvenance(runtimeDirectory, platform, expectedBuildPlan) {
-  if (!expectedBuildPlan || platform !== 'darwin') return;
-  const expectedRuntimeKey =
-    expectedBuildPlan.kiCore.platform === 'macos-arm64' ? 'darwin-arm64' : expectedBuildPlan.kiCore.platform;
-  if (path.basename(runtimeDirectory) !== expectedRuntimeKey) {
+function verifyKiCoreProvenance(runtimeDirectory, platform, expectedBuildPlan, expectedPlatform) {
+  if (!expectedBuildPlan) return;
+  const platformPrefix = platform === 'darwin' ? 'macos-' : platform === 'win32' ? 'windows-' : `${platform}-`;
+  const runtimeKey = path.basename(runtimeDirectory);
+  const runtimePrefix = `${platform}-`;
+  if (!runtimeKey.startsWith(runtimePrefix)) {
     throw new Error('Bundled Ki-Core runtime target does not match the resolved build plan');
+  }
+  const arch = runtimeKey.slice(runtimePrefix.length);
+  const selectedPlatform = `${platformPrefix}${arch}`;
+  if (!expectedBuildPlan.platforms.includes(selectedPlatform)) {
+    throw new Error('Bundled Ki-Core runtime target is not selected by the resolved build plan');
+  }
+  if (expectedPlatform && selectedPlatform !== expectedPlatform) {
+    throw new Error('Bundled Ki-Core runtime target does not match the artifact platform');
   }
   const manifestPath = requireFile(path.join(runtimeDirectory, 'manifest.json'), 'Bundled Ki-Core manifest');
   let manifest;
@@ -81,8 +94,8 @@ function verifyKiCoreProvenance(runtimeDirectory, platform, expectedBuildPlan) {
   const expectedSourcePolicy = expected.sourcePolicy ?? 'release-pinned';
   const expectedVersion = expected.version ?? expected.tag?.replace(/^ki-core-v/u, '');
   const commonMatches =
-    manifest?.platform === 'darwin' &&
-    manifest?.arch === 'arm64' &&
+    manifest?.platform === platform &&
+    manifest?.arch === arch &&
     manifest?.source?.policy === expectedSourcePolicy &&
     manifest?.source?.repository === expected.repository &&
     manifest?.kiCore?.version === expectedVersion &&
@@ -94,8 +107,8 @@ function verifyKiCoreProvenance(runtimeDirectory, platform, expectedBuildPlan) {
       ? manifest?.source?.workflow === expected.candidate?.workflow &&
         Number(manifest?.source?.runId) === expected.candidate?.runId &&
         manifest?.source?.headSha === expected.commit &&
-        manifest?.source?.artifactName === expected.candidate?.artifactName &&
-        manifest?.source?.checksum === expected.checksum
+        manifest?.source?.artifactName === expected.candidate?.artifacts?.[selectedPlatform] &&
+        manifest?.source?.checksum === expected.checksums?.[selectedPlatform]
       : manifest?.source?.tag === expected.tag;
   if (!commonMatches || !sourceMatches) {
     throw new Error('Bundled Ki-Core provenance does not match the resolved build plan');
@@ -119,13 +132,53 @@ function readMacInfoPlist(infoPlistPath) {
   return JSON.parse(output);
 }
 
-function readWindowsProductName(executablePath) {
+function readWindowsExecutableMetadata(executablePath) {
   const escapedPath = executablePath.replaceAll("'", "''");
-  return execFileSync(
+  const output = execFileSync(
     'powershell.exe',
-    ['-NoProfile', '-Command', `(Get-Item -LiteralPath '${escapedPath}').VersionInfo.ProductName`],
+    [
+      '-NoProfile',
+      '-Command',
+      `Add-Type -AssemblyName System.Drawing; $item = Get-Item -LiteralPath '${escapedPath}'; $icon = [System.Drawing.Icon]::ExtractAssociatedIcon($item.FullName); $width = if ($null -eq $icon) { 0 } else { $icon.Width }; $height = if ($null -eq $icon) { 0 } else { $icon.Height }; if ($null -ne $icon) { $icon.Dispose() }; [PSCustomObject]@{ productName = $item.VersionInfo.ProductName; iconWidth = $width; iconHeight = $height } | ConvertTo-Json -Compress`,
+    ],
     { encoding: 'utf8' }
-  ).trim();
+  );
+  return JSON.parse(output);
+}
+
+function readWindowsPeArchitecture(filePath) {
+  const contents = fs.readFileSync(filePath);
+  if (contents.length < 64 || contents[0] !== 0x4d || contents[1] !== 0x5a) {
+    throw new Error(`Windows PE file has an invalid DOS header: ${filePath}`);
+  }
+  const peOffset = contents.readUInt32LE(0x3c);
+  if (
+    peOffset > contents.length - 6 ||
+    contents[peOffset] !== 0x50 ||
+    contents[peOffset + 1] !== 0x45 ||
+    contents[peOffset + 2] !== 0 ||
+    contents[peOffset + 3] !== 0
+  ) {
+    throw new Error(`Windows PE file has an invalid PE signature: ${filePath}`);
+  }
+  const machine = contents.readUInt16LE(peOffset + 4);
+  if (machine === 0x8664) return 'x64';
+  if (machine === 0xaa64) return 'arm64';
+  throw new Error(`Windows PE file has an unsupported machine type 0x${machine.toString(16)}: ${filePath}`);
+}
+
+function readWindowsProtocolRegistrations(schemes) {
+  const schemesJson = JSON.stringify(schemes).replaceAll("'", "''");
+  const output = execFileSync(
+    'powershell.exe',
+    [
+      '-NoProfile',
+      '-Command',
+      `$schemes = ConvertFrom-Json '${schemesJson}'; $registrations = @($schemes | ForEach-Object { $scheme = $_; $keyPath = "Registry::HKEY_CLASSES_ROOT\\$scheme"; $commandPath = "$keyPath\\shell\\open\\command"; if ((Test-Path -LiteralPath $keyPath) -and (Test-Path -LiteralPath $commandPath)) { $key = Get-Item -LiteralPath $keyPath; $commandKey = Get-Item -LiteralPath $commandPath; [PSCustomObject]@{ scheme = $scheme; urlProtocolPresent = $null -ne $key.GetValue('URL Protocol', $null); command = $commandKey.GetValue($null, $null) } } else { [PSCustomObject]@{ scheme = $scheme; urlProtocolPresent = $false; command = $null } } }); [PSCustomObject]@{ registrations = $registrations } | ConvertTo-Json -Compress -Depth 3`,
+    ],
+    { encoding: 'utf8' }
+  );
+  return JSON.parse(output).registrations;
 }
 
 function verifyMacIdentity(appPath, packagingIdentity) {
@@ -143,6 +196,124 @@ function verifyMacIdentity(appPath, packagingIdentity) {
   const configuredSchemes = packagingIdentity.desktop.protocols.flatMap((protocol) => protocol.schemes);
   if (JSON.stringify(schemes) !== JSON.stringify(configuredSchemes)) {
     throw new Error('macOS URL schemes do not match the expected packaging identity');
+  }
+}
+
+function verifyPackagedProtocol(resourcesDir, packagingIdentity) {
+  const appArchive = fs.readFileSync(requireFile(path.join(resourcesDir, 'app.asar'), 'Packaged app archive'));
+  const protocolSchemes = packagingIdentity.desktop.protocols.flatMap((protocol) => protocol.schemes);
+  if (protocolSchemes.some((scheme) => !appArchive.includes(Buffer.from(scheme, 'utf8')))) {
+    throw new Error('Packaged app protocol does not match the expected packaging identity');
+  }
+}
+
+function readDesktopEntry(filePath) {
+  return Object.fromEntries(
+    fs
+      .readFileSync(filePath, 'utf8')
+      .split(/\r?\n/u)
+      .filter((line) => line && !line.startsWith('#') && !line.startsWith('[') && line.includes('='))
+      .map((line) => {
+        const separator = line.indexOf('=');
+        return [line.slice(0, separator), line.slice(separator + 1)];
+      })
+  );
+}
+
+function verifyLinuxPackageIdentity(packageRoot, packagingIdentity) {
+  const desktopEntryPath = requireSinglePath(
+    listFilesRecursively(packageRoot).filter(
+      (filePath) => path.basename(filePath) === `${packagingIdentity.desktop.executableName}.desktop`
+    ),
+    'Linux desktop entry'
+  );
+  const entry = readDesktopEntry(desktopEntryPath);
+  const protocolSchemes = packagingIdentity.desktop.protocols.flatMap((protocol) => protocol.schemes);
+  const protocolHandlers = new Set(
+    String(entry.MimeType || '')
+      .split(';')
+      .filter(Boolean)
+  );
+  if (
+    entry.Name !== packagingIdentity.desktop.productName ||
+    entry.Icon !== packagingIdentity.desktop.executableName ||
+    !String(entry.Exec || '').includes(`/${packagingIdentity.desktop.executableName}`) ||
+    protocolSchemes.some((scheme) => !protocolHandlers.has(`x-scheme-handler/${scheme}`))
+  ) {
+    throw new Error('Linux desktop metadata does not match the expected packaging identity');
+  }
+  const installedIcons = listFilesRecursively(packageRoot).filter(
+    (filePath) =>
+      path.basename(filePath) === `${packagingIdentity.desktop.executableName}.png` && fs.statSync(filePath).size > 0
+  );
+  if (installedIcons.length === 0) {
+    throw new Error('Linux installer does not contain the expected application icon');
+  }
+}
+
+function resolveLinuxApplicationRoot(packageRoot, packagingIdentity) {
+  const buildEvidencePath = packagingIdentity.resources.packaged.buildEvidence;
+  const matches = listFilesRecursively(packageRoot)
+    .filter((filePath) => filePath.endsWith(path.join('resources', buildEvidencePath)))
+    .map((filePath) => filePath.slice(0, -path.join('resources', buildEvidencePath).length).replace(/[\\/]$/u, ''));
+  return requireSinglePath([...new Set(matches)], 'Linux installed application');
+}
+
+/** Materializes the application contained in one platform-native installer for packaged verification. */
+function materializeKiBuddyInstaller(installerPath, platform, packagingIdentity, options = {}) {
+  const execute = options.execute ?? execFileSync;
+  const tempRoot = options.tempRoot ?? fs.mkdtempSync(path.join(os.tmpdir(), 'ki-buddy-installer-'));
+  const cleanup = (detachPath, uninstallPath) => {
+    if (detachPath) {
+      try {
+        execute('hdiutil', ['detach', detachPath], { stdio: ['ignore', 'ignore', 'ignore'] });
+      } catch {
+        // The runner is ephemeral; verification failures must not be replaced by detach failures.
+      }
+    }
+    if (uninstallPath) {
+      try {
+        execute(uninstallPath, ['/S'], { stdio: ['ignore', 'ignore', 'ignore'] });
+      } catch {
+        // Verification already completed; removal of the ephemeral install directory still continues.
+      }
+    }
+    fs.rmSync(tempRoot, { recursive: true, force: true });
+  };
+  try {
+    if (platform.startsWith('macos-')) {
+      const mountPath = path.join(tempRoot, 'mount');
+      fs.mkdirSync(mountPath, { recursive: true });
+      execute('hdiutil', ['attach', '-nobrowse', '-readonly', '-mountpoint', mountPath, installerPath], {
+        stdio: ['ignore', 'ignore', 'pipe'],
+      });
+      return { packageRoot: mountPath, unpackedPath: mountPath, cleanup: () => cleanup(mountPath) };
+    }
+    if (platform.startsWith('windows-')) {
+      const installPath = path.join(tempRoot, 'installed');
+      execute(installerPath, ['/S', `/D=${installPath}`], { stdio: ['ignore', 'ignore', 'pipe'] });
+      if (!fs.statSync(installPath, { throwIfNoEntry: false })?.isDirectory()) {
+        throw new Error('Windows installer did not create the requested installation directory');
+      }
+      const uninstallPath = listFilesRecursively(installPath).find((filePath) =>
+        /^uninstall.*\.exe$/iu.test(path.basename(filePath))
+      );
+      return { packageRoot: installPath, unpackedPath: installPath, cleanup: () => cleanup(undefined, uninstallPath) };
+    }
+    if (platform.startsWith('linux-')) {
+      const packageRoot = path.join(tempRoot, 'package');
+      fs.mkdirSync(packageRoot, { recursive: true });
+      execute('dpkg-deb', ['--extract', installerPath, packageRoot], { stdio: ['ignore', 'ignore', 'pipe'] });
+      return {
+        packageRoot,
+        unpackedPath: resolveLinuxApplicationRoot(packageRoot, packagingIdentity),
+        cleanup: () => cleanup(),
+      };
+    }
+    throw new Error(`Unsupported Ki-Buddy installer platform: ${platform}`);
+  } catch (error) {
+    cleanup();
+    throw error;
   }
 }
 
@@ -212,7 +383,9 @@ function verifyKiBuddyUnpacked(
   unpackedPath,
   platform = process.platform,
   expectedIdentity,
-  expectedBuildPlan
+  expectedBuildPlan,
+  packageRoot,
+  options = {}
 ) {
   const productConfig = readProductConfig(projectRoot);
   const expectsPackagingIdentity = expectedIdentity !== undefined;
@@ -238,12 +411,12 @@ function verifyKiBuddyUnpacked(
   }
 
   requireFile(executablePath, `${platform} packaged executable`);
-  requireMatchingFile(
+  requirePackagedResource(
     productIcon,
     path.join(resourcesDir, packagingIdentity.resources.packaged.applicationIcon),
     `${platform} application icon`
   );
-  requireMatchingFile(
+  requirePackagedResource(
     productIcon,
     path.join(resourcesDir, packagingIdentity.resources.packaged.runtimeIcon),
     `${platform} runtime icon`
@@ -257,8 +430,12 @@ function verifyKiBuddyUnpacked(
     platform,
     packagingIdentity.resources.packaged.bundledAionCore
   );
-  verifyKiCoreProvenance(bundledRuntimeDirectory, platform, expectedBuildPlan);
+  const expectedPlatform =
+    options.expectedPlatform ??
+    (expectedBuildPlan?.platforms?.length === 1 ? expectedBuildPlan.platforms[0] : undefined);
+  verifyKiCoreProvenance(bundledRuntimeDirectory, platform, expectedBuildPlan, expectedPlatform);
   const managedNodePath = resolveManagedNode(bundledRuntimeDirectory, platform);
+  verifyPackagedProtocol(resourcesDir, packagingIdentity);
   const buildEvidencePath = verifyBuildEvidence(
     resourcesDir,
     packagingIdentity,
@@ -266,8 +443,8 @@ function verifyKiBuddyUnpacked(
     expectedBuildPlan
   );
 
-  if (platform === 'win32' && readWindowsProductName(executablePath) !== packagingIdentity.desktop.productName) {
-    throw new Error('Windows executable ProductName does not match the expected product name');
+  if (platform === 'linux' && packageRoot) {
+    verifyLinuxPackageIdentity(packageRoot, packagingIdentity);
   }
 
   return {
@@ -279,6 +456,62 @@ function verifyKiBuddyUnpacked(
     platform,
     productName: packagingIdentity.desktop.productName,
   };
+}
+
+/** Verifies Windows architecture, metadata, and protocol registration after installing a project EXE. */
+function verifyKiBuddyWindowsInstallation(applicationRoot, packagingIdentity, expectedPlatform, options = {}) {
+  if (!expectedPlatform?.startsWith('windows-')) {
+    throw new Error('Windows artifact verification requires its canonical platform');
+  }
+  const executablePath = path.join(applicationRoot, `${packagingIdentity.desktop.executableName}.exe`);
+  const expectedArchitecture = expectedPlatform.slice('windows-'.length);
+  if (readWindowsPeArchitecture(executablePath) !== expectedArchitecture) {
+    throw new Error('Windows executable architecture does not match the artifact platform');
+  }
+  const nativeModulePath = requireFile(
+    path.join(
+      applicationRoot,
+      'resources',
+      'app.asar.unpacked',
+      'node_modules',
+      'better-sqlite3',
+      'build',
+      'Release',
+      'better_sqlite3.node'
+    ),
+    'Windows better-sqlite3 native module'
+  );
+  if (readWindowsPeArchitecture(nativeModulePath) !== expectedArchitecture) {
+    throw new Error('Windows better-sqlite3 architecture does not match the artifact platform');
+  }
+  const metadata = (options.readWindowsExecutableMetadata ?? readWindowsExecutableMetadata)(executablePath);
+  if (
+    metadata?.productName !== packagingIdentity.desktop.productName ||
+    !Number.isSafeInteger(metadata?.iconWidth) ||
+    metadata.iconWidth < 16 ||
+    !Number.isSafeInteger(metadata?.iconHeight) ||
+    metadata.iconHeight < 16
+  ) {
+    throw new Error('Windows executable metadata or icon does not match the expected packaging identity');
+  }
+  const protocolSchemes = packagingIdentity.desktop.protocols.flatMap((protocol) => protocol.schemes);
+  const registrationResult = (options.readWindowsProtocolRegistrations ?? readWindowsProtocolRegistrations)(
+    protocolSchemes
+  );
+  const registrations = Array.isArray(registrationResult) ? registrationResult : [];
+  const normalizedExecutablePath = executablePath.replaceAll('\\', '/').toLowerCase();
+  if (
+    protocolSchemes.some((scheme) => {
+      const registration = registrations.find((entry) => entry?.scheme === scheme);
+      return (
+        registration?.urlProtocolPresent !== true ||
+        typeof registration.command !== 'string' ||
+        !registration.command.replaceAll('\\', '/').toLowerCase().includes(normalizedExecutablePath)
+      );
+    })
+  ) {
+    throw new Error('Windows URL protocol registration does not match the installed application');
+  }
 }
 
 function runCli() {
@@ -304,4 +537,4 @@ if (require.main === module) {
   }
 }
 
-module.exports = { verifyKiBuddyUnpacked };
+module.exports = { materializeKiBuddyInstaller, verifyKiBuddyUnpacked, verifyKiBuddyWindowsInstallation };

@@ -10,7 +10,7 @@ Ki-Buddy 打包只允许三种显式来源策略：
 
 `build-manual.yml` 默认使用 `release-pinned` 验证已发布版本；选择 `candidate` 时才填写 run ID 与 head SHA，两项必须同时提供。Candidate artifact 只包含当前平台 archive；其可信身份来自指定的 Actions run、workflow、`product/main` commit 和 artifact 名称，不依赖额外 provenance manifest。
 
-`build-project-preview.yml` 的 `mode` 默认为 `preview`；选择 `formal` 时进入项目正式 candidate 流程。正式流程必须从 `product/main` dispatch，只接受对应 `distribution/<distributionId>` 分支可达的完整 commit SHA，并在运行项目代码前验证 active Ruleset、注册记录、分发清单、交付历史、平台和 Ki-Core provenance。`release-pinned` 读取 checked-in pin；`candidate` 只接受 public `xlihub/Ki-Core` 中已完成且成功的 `build-manual.yml` artifact，并额外固定版本、commit、AionCore mapping 和 archive checksum。
+`build-project-preview.yml` 的 `mode` 默认为 `preview`；schema v2 从 `platforms.preview` 读取完整预览平台集合，validation job 生成一个 immutable build plan 和对应矩阵，build 与 verify job 再按矩阵展开。当前 `zxjt` 只选择 `macos-arm64`，因此在 `macos-14` 构建并验证一个 DMG。选择 `formal` 时进入项目正式 candidate 流程，并从 `platforms.formal` 读取正式平台。正式流程必须从 `product/main` dispatch，只接受对应 `distribution/<distributionId>` 分支可达的完整 commit SHA，并在运行项目代码前验证 active Ruleset、注册记录、分发清单、交付历史、完整选定平台集合和 Ki-Core provenance。build job 从相同的受信注册 revision 使用 `setup-project-build` composite action，统一准备系统打包依赖、项目依赖与目标架构 Electron native modules。所有平台 job 使用 validation job 生成的同一份 immutable build plan；各平台独立验证后，由 finalization job 检查平台覆盖、checksum 和 provenance，全部成功才形成一个 candidate。Windows 验证同时检查安装后的主程序与 `better-sqlite3` PE 架构。`zxjt` 首个正式 candidate 固定包含 `windows-x64` 与 `windows-arm64` 两个 EXE。`release-pinned` 读取 checked-in pin；`candidate` 只接受 public `xlihub/Ki-Core` 中已完成且成功的 `build-manual.yml` artifacts，并固定版本、commit、AionCore mapping 和各平台 archive checksum。
 
 当前正式 pin 由 `ki-buddy-product.json.kiCore` 管理。更新 tag、commit、AionCore 映射或六个平台 SHA-256 时，必须同步更新 `ki-buddy-release.json`，并通过版本准备校验。
 

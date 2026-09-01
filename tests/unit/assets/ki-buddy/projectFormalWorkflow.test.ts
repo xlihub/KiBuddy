@@ -13,7 +13,10 @@ type WorkflowStep = {
 type WorkflowJob = {
   if?: string;
   needs?: string | string[];
+  'runs-on'?: string;
   env?: Record<string, string>;
+  outputs?: Record<string, string>;
+  strategy?: { 'fail-fast': boolean; matrix: string };
   steps: WorkflowStep[];
 };
 
@@ -69,6 +72,7 @@ describe('project formal workflow trust boundary', () => {
 
     expect(validation).toContain('distribution/$DISTRIBUTION_ID');
     expect(validation).toContain('verify-source-reachability');
+    expect(validation).not.toContain('git -C source fetch');
   });
 
   it('loads active GitHub rules for the registered distribution branch', () => {
@@ -82,13 +86,36 @@ describe('project formal workflow trust boundary', () => {
     expect(validation).toContain('--mode formal');
   });
 
-  it('downloads the trusted formal plan before executing project installation or build code', () => {
+  it('takes the selected platform set from the manifest into one immutable resolved plan', () => {
+    const validation = formalValidationScript();
+
+    expect(validation).toContain("JSON.stringify(require('./source/distribution-manifest.json').platforms.formal)");
+    expect(validation).toContain('--platforms-json "$platforms_json"');
+    expect(validation).toContain('create-build-matrix');
+    expect(workflow().jobs.formal_validate.outputs?.matrix).toContain('steps.resolve.outputs.matrix');
+  });
+
+  it('fans out every selected platform from the same trusted formal plan before executing project code', () => {
     const build = workflow().jobs.formal_build;
 
     expect(build.needs).toBe('formal_validate');
-    expect(build.steps.indexOf(step(build, 'Download immutable formal build plan'))).toBeLessThan(
-      build.steps.indexOf(step(build, 'Install project dependencies'))
+    expect(build['runs-on']).toBe('${{ matrix.os }}');
+    expect(build.strategy).toEqual({
+      'fail-fast': false,
+      matrix: '${{ fromJSON(needs.formal_validate.outputs.matrix) }}',
+    });
+    expect(step(build, 'Checkout trusted project build setup').with?.ref).toBe(
+      '${{ needs.formal_validate.outputs.registration_revision }}'
     );
+    expect(build.steps.indexOf(step(build, 'Download immutable formal build plan'))).toBeLessThan(
+      build.steps.indexOf(step(build, 'Prepare project build dependencies'))
+    );
+    expect(step(build, 'Prepare project build dependencies').uses).toBe(
+      './trusted/.github/actions/setup-project-build'
+    );
+    expect(step(build, 'Build formal package').run).toBe('${{ matrix.command }}');
+    expect(step(build, 'Upload unverified formal installer').with?.name).toContain('${{ matrix.platform }}');
+    expect(step(build, 'Upload unverified formal installer').with?.path).not.toContain('unpacked');
   });
 
   it('accepts only release-pinned or verified successful Ki-Core candidate provenance', () => {
@@ -122,20 +149,56 @@ describe('project formal workflow trust boundary', () => {
     expect(validation).toContain("--build-credential-names '[]'");
   });
 
-  it('publishes a unique candidate attempt only after independent package verification', () => {
+  it('verifies every platform independently and publishes one candidate only after the entire matrix succeeds', () => {
     const config = workflow();
     const verify = config.jobs.formal_verify;
+    const finalize = config.jobs.formal_finalize;
     const source = workflowSource();
-    const finalUpload = step(verify, 'Upload formal candidate attempt');
+    const finalUpload = step(finalize, 'Upload formal candidate attempt');
 
     expect(verify.needs).toEqual(['formal_validate', 'formal_build']);
-    expect(step(verify, 'Verify formal package and create candidate record').run).toContain(
-      'projectDistribution.js create-candidate'
-    );
+    expect(verify['runs-on']).toBe('${{ matrix.os }}');
+    expect(verify.strategy?.matrix).toBe('${{ fromJSON(needs.formal_validate.outputs.matrix) }}');
+    expect(step(verify, 'Verify formal platform artifact').run).toContain('projectDistribution.js verify-artifact');
+    expect(step(verify, 'Verify formal platform artifact').run).toContain('--artifacts-root candidate');
+    expect(step(verify, 'Upload verified formal platform').with?.name).toContain('${{ matrix.platform }}');
+    expect(finalize.needs).toEqual(['formal_validate', 'formal_verify']);
+    expect(step(finalize, 'Create atomic formal candidate').run).toContain('projectDistribution.js create-candidate');
     expect(finalUpload.with?.name).toBe(
       'ki-buddy-${{ inputs.distribution_id }}-${{ inputs.version }}-candidate-${{ github.run_id }}-${{ github.run_attempt }}'
     );
     expect(source.match(/Upload formal candidate attempt/gu)).toHaveLength(1);
     expect(finalUpload.with?.path).toContain('verified/project-candidate.json');
+  });
+
+  it('does not finalize a candidate when any platform build or verification job fails', () => {
+    const config = workflow();
+
+    expect(config.jobs.formal_verify.needs).toEqual(['formal_validate', 'formal_build']);
+    expect(config.jobs.formal_finalize.needs).toEqual(['formal_validate', 'formal_verify']);
+    expect(config.jobs.formal_finalize.if).toBe("inputs.mode == 'formal'");
+    expect(config.jobs.formal_finalize.if).not.toContain('always()');
+  });
+
+  it('fails a platform build when its installer artifact is missing', () => {
+    const config = workflow();
+    const upload = step(config.jobs.formal_build, 'Upload unverified formal installer');
+    const evidenceUpload = step(config.jobs.formal_build, 'Upload unverified formal evidence');
+    const download = step(config.jobs.formal_verify, 'Download unverified formal installer');
+
+    expect(upload.with?.['if-no-files-found']).toBe('error');
+    expect(upload.with?.path).toContain('source/out/*.dmg');
+    expect(upload.with?.path).toContain('source/out/*.exe');
+    expect(upload.with?.path).toContain('source/out/*.deb');
+    expect(upload.with?.path).not.toContain('project-build-evidence.json');
+    expect(evidenceUpload.with?.path).toBe('source/out/project-distribution/project-build-evidence.json');
+    expect(download.with?.name).toContain('${{ matrix.platform }}');
+  });
+
+  it('retains partial platform output only as short-lived evidence when the matrix does not complete', () => {
+    const verifyUpload = step(workflow().jobs.formal_verify, 'Upload verified formal platform');
+
+    expect(verifyUpload.with?.['retention-days']).toBe(1);
+    expect(verifyUpload.with?.name).toContain('${{ matrix.platform }}');
   });
 });

@@ -1,15 +1,19 @@
 import { describe, expect, it } from 'vitest';
 import { execFileSync } from 'node:child_process';
-import { existsSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
+import { existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { resolve as resolvePath } from 'node:path';
 
 const {
   createFormalBranchRulesetEvidence,
+  createProjectDistributionBuildMatrix,
   createProjectDistributionCandidateRecord,
+  createProjectDistributionPlatformVerification,
   createProjectKiCoreCandidateProvenance,
+  mergeProjectKiCoreCandidateProvenance,
   resolveProjectDistributionBuildPlan,
   verifyFormalSourceReachability,
+  verifyProjectDistributionArtifact,
 } = require('../../../../packages/shared-scripts/src/projectDistribution');
 
 const SOURCE_SHA = '1234567890abcdef1234567890abcdef12345678';
@@ -18,7 +22,7 @@ const BASELINE_SHA = 'fedcba0987654321fedcba0987654321fedcba09';
 
 function createRegistration(overrides: Record<string, unknown> = {}) {
   return {
-    schemaVersion: 1,
+    schemaVersion: 2,
     registrations: [
       {
         distributionId: 'zxjt',
@@ -43,7 +47,14 @@ function createRegistration(overrides: Record<string, unknown> = {}) {
           },
         },
         allowed: {
-          platforms: ['macos-arm64'],
+          platforms: {
+            preview: ['macos-arm64'],
+            formal: ['macos-arm64'],
+          },
+          requiredPlatforms: {
+            preview: [],
+            formal: [],
+          },
           integrations: [],
           disabledFeatures: ['account', 'about', 'feedback', 'githubResources'],
           nonSensitiveConfigKeys: [],
@@ -57,7 +68,7 @@ function createRegistration(overrides: Record<string, unknown> = {}) {
 
 function createManifest(overrides: Record<string, unknown> = {}) {
   return {
-    schemaVersion: 1,
+    schemaVersion: 2,
     distributionId: 'zxjt',
     version: '0.1.0',
     baseline: {
@@ -78,7 +89,10 @@ function createManifest(overrides: Record<string, unknown> = {}) {
       ico: 'resources/ki-buddy/app.ico',
       icns: 'resources/ki-buddy/app.icns',
     },
-    platforms: ['macos-arm64'],
+    platforms: {
+      preview: ['macos-arm64'],
+      formal: ['macos-arm64'],
+    },
     ...overrides,
   };
 }
@@ -94,7 +108,12 @@ function createKiCore() {
       peeledCommit: '57a34cc1b1a3b17bcc023de06b9e6768fceac36f',
     },
     checksums: {
+      'macos-x64': '258570bdb23bc519ca31ddaab65515a77aeea0dc485ec418ea3acbf29dabb270',
       'macos-arm64': '95d91e02ee3c4da693e7c51ecfa6b732176e8bea92bb028990da6de9033941c9',
+      'windows-x64': 'f596000c538c94257988c69c28635d2a1a80e26d01ebdfb619d04e94adea21ec',
+      'windows-arm64': '281a5ee61d81a1368b52f1cb5fa5a05aa0b9b0b7eedfb12b8a713c0625f0bf90',
+      'linux-x64': '9c835ed206e85b4285486bf8bed7d1acfdfdaacc149822f310305a785977a617',
+      'linux-arm64': '2776ddb271261498ec37b10817ee77af2db5f1b49afcacdd5c183f3d234c8d9a',
     },
   };
 }
@@ -115,9 +134,44 @@ function createCandidateKiCore() {
     candidate: {
       workflow: 'build-manual.yml',
       runId: 801,
-      artifactName: 'ki-core-candidate-macos-arm64',
+      artifacts: { 'macos-arm64': 'ki-core-candidate-macos-arm64' },
     },
   };
+}
+
+function createMultiPlatformFormalPlan() {
+  const platforms = ['macos-x64', 'macos-arm64', 'windows-x64', 'windows-arm64', 'linux-x64', 'linux-arm64'];
+  const registry = createRegistration();
+  registry.registrations[0].allowed.platforms = { preview: platforms, formal: platforms };
+  const manifest = createManifest({ platforms: { preview: platforms, formal: platforms } });
+  const kiCore = createKiCore();
+  kiCore.checksums = {
+    'macos-x64': '1'.repeat(64),
+    'macos-arm64': '2'.repeat(64),
+    'windows-x64': '3'.repeat(64),
+    'windows-arm64': '4'.repeat(64),
+    'linux-x64': '5'.repeat(64),
+    'linux-arm64': '6'.repeat(64),
+  };
+  return resolveFormal({ registry, manifest, requestedPlatforms: platforms, kiCore });
+}
+
+function createPlatformVerifications(buildPlan: ReturnType<typeof resolveFormal>) {
+  const extensions: Record<string, string> = {
+    'macos-x64': 'dmg',
+    'macos-arm64': 'dmg',
+    'windows-x64': 'exe',
+    'windows-arm64': 'exe',
+    'linux-x64': 'deb',
+    'linux-arm64': 'deb',
+  };
+  return buildPlan.platforms.map((platform: string, index: number) =>
+    createProjectDistributionPlatformVerification(buildPlan, {
+      platform,
+      fileName: `ki-buddy-zxjt-${platform}.${extensions[platform]}`,
+      checksum: String(index + 4).repeat(64),
+    })
+  );
 }
 
 function createDeliveryRecords(deliveries: unknown[] = []) {
@@ -165,6 +219,7 @@ function resolve(
     manifest?: unknown;
     source?: unknown;
     requestedPlatforms?: string[];
+    kiCore?: unknown;
   } = {}
 ) {
   return resolveProjectDistributionBuildPlan({
@@ -174,7 +229,7 @@ function resolve(
     source: overrides.source ?? ({ repository: 'xlihub/KiBuddy', commit: SOURCE_SHA, treeState: 'committed' } as const),
     registrationRevision: REGISTRATION_REVISION,
     requestedPlatforms: overrides.requestedPlatforms ?? ['macos-arm64'],
-    kiCore: createKiCore(),
+    kiCore: overrides.kiCore ?? createKiCore(),
   });
 }
 
@@ -270,9 +325,52 @@ describe('project distribution build contract', () => {
       candidate: {
         workflow: 'build-manual.yml',
         runId: 801,
-        artifactName: 'ki-core-candidate-macos-arm64',
+        artifacts: { 'macos-arm64': 'ki-core-candidate-macos-arm64' },
       },
     });
+  });
+
+  it('merges verified Ki-Core artifacts without allowing their immutable provenance to diverge', () => {
+    const macos = createProjectKiCoreCandidateProvenance(
+      {
+        manifest: {
+          product: { version: '0.1.5', tag: null, releaseCommit: '3'.repeat(40) },
+          upstream: { repository: 'iOfficeAI/AionCore', tag: 'v0.1.73', peeledCommit: '4'.repeat(40) },
+        },
+        source: {
+          policy: 'candidate',
+          repository: 'xlihub/Ki-Core',
+          workflow: 'build-manual.yml',
+          runId: '801',
+          headSha: '3'.repeat(40),
+          version: '0.1.5',
+          artifactName: 'ki-core-candidate-macos-arm64',
+          checksum: '5'.repeat(64),
+          url: 'https://api.github.com/repos/xlihub/Ki-Core/actions/artifacts/12/zip',
+        },
+      },
+      'macos-arm64'
+    );
+    const windows = structuredClone(macos);
+    windows.checksums = { 'windows-x64': '6'.repeat(64) };
+    windows.candidate.artifacts = { 'windows-x64': 'ki-core-candidate-windows-x64' };
+
+    expect(mergeProjectKiCoreCandidateProvenance([macos, windows], ['macos-arm64', 'windows-x64'])).toMatchObject({
+      checksums: { 'macos-arm64': '5'.repeat(64), 'windows-x64': '6'.repeat(64) },
+      candidate: {
+        workflow: 'build-manual.yml',
+        runId: 801,
+        artifacts: {
+          'macos-arm64': 'ki-core-candidate-macos-arm64',
+          'windows-x64': 'ki-core-candidate-windows-x64',
+        },
+      },
+    });
+
+    windows.commit = '7'.repeat(40);
+    expect(() => mergeProjectKiCoreCandidateProvenance([macos, windows], ['macos-arm64', 'windows-x64'])).toThrowError(
+      /provenance.*consistent/i
+    );
   });
 
   it('keeps the checked-in zxjt registration and distribution manifest example resolvable together', () => {
@@ -287,10 +385,28 @@ describe('project distribution build contract', () => {
     );
 
     expect(branchManifest).toEqual(manifest);
+    expect(manifest).toMatchObject({
+      schemaVersion: 2,
+      platforms: {
+        preview: ['macos-arm64'],
+        formal: ['windows-x64', 'windows-arm64'],
+      },
+    });
+    expect(registry.registrations[0].allowed).toMatchObject({
+      platforms: {
+        preview: ['macos-arm64'],
+        formal: ['windows-x64', 'windows-arm64'],
+      },
+      requiredPlatforms: {
+        preview: ['macos-arm64'],
+        formal: ['windows-x64', 'windows-arm64'],
+      },
+    });
 
-    expect(resolve({ registry, manifest })).toMatchObject({
+    expect(resolve({ registry, manifest, requestedPlatforms: ['macos-arm64'] })).toMatchObject({
       distributionId: 'zxjt',
       identityMode: 'local',
+      platforms: ['macos-arm64'],
       packagingIdentity: {
         desktop: {
           appId: 'com.xlihub.ki-buddy.zxjt.preview',
@@ -304,7 +420,32 @@ describe('project distribution build contract', () => {
         stdio: 'ignore',
       })
     ).not.toThrow();
-    expect(resolveFormal({ registry, manifest, deliveryRecords }).deliveryHistory.deliveredVersions).toEqual([]);
+    expect(
+      resolveFormal({
+        registry,
+        manifest,
+        deliveryRecords,
+        requestedPlatforms: ['windows-x64', 'windows-arm64'],
+      }).deliveryHistory.deliveredVersions
+    ).toEqual([]);
+  });
+
+  it('keeps delivery record schema platforms and checksums aligned with the supported project build matrix', () => {
+    const projectRoot = resolvePath(__dirname, '../../../..');
+    const schema = JSON.parse(
+      readFileSync(resolvePath(projectRoot, 'distributions/schemas/delivery-record.schema.json'), 'utf8')
+    );
+    const supportedPlatforms = createProjectDistributionBuildMatrix(createMultiPlatformFormalPlan()).include.map(
+      ({ platform }) => platform
+    );
+
+    const deliveryProperties = schema.properties.deliveries.items.properties;
+
+    expect(deliveryProperties.platforms.items.enum).toEqual(supportedPlatforms);
+    expect(deliveryProperties.installerChecksums).toMatchObject({
+      minProperties: 1,
+      propertyNames: { enum: supportedPlatforms },
+    });
   });
 
   it('resolves a frozen local preview plan with isolated identity and no credential scope', () => {
@@ -351,8 +492,102 @@ describe('project distribution build contract', () => {
       },
     });
     expect(plan.manifest.digest).toMatch(/^[0-9a-f]{64}$/);
-    expect(plan.kiCore.checksum).toMatch(/^[0-9a-f]{64}$/);
+    expect(plan.kiCore.checksums['macos-arm64']).toMatch(/^[0-9a-f]{64}$/);
     expect(Object.isFrozen(plan)).toBe(true);
+  });
+
+  it('resolves preview platforms from a mode-specific schema v2 policy', () => {
+    const registry = createRegistration();
+    registry.registrations[0].allowed.platforms = {
+      preview: ['macos-arm64'],
+      formal: ['windows-x64', 'windows-arm64'],
+    };
+    registry.registrations[0].allowed.requiredPlatforms = {
+      preview: ['macos-arm64'],
+      formal: ['windows-x64', 'windows-arm64'],
+    };
+    const manifest = createManifest({
+      platforms: {
+        preview: ['macos-arm64'],
+        formal: ['windows-x64', 'windows-arm64'],
+      },
+    });
+
+    const plan = resolve({ registry, manifest, requestedPlatforms: ['macos-arm64'] });
+
+    expect(plan.platforms).toEqual(['macos-arm64']);
+    expect(createProjectDistributionBuildMatrix(plan).include).toEqual([
+      expect.objectContaining({ platform: 'macos-arm64', os: 'macos-14', runtimePlatform: 'darwin' }),
+    ]);
+  });
+
+  it('creates a preview build matrix for all six supported project platforms', () => {
+    const platforms = ['macos-x64', 'macos-arm64', 'windows-x64', 'windows-arm64', 'linux-x64', 'linux-arm64'];
+    const registry = createRegistration();
+    registry.registrations[0].allowed.platforms = { preview: platforms, formal: platforms };
+    const manifest = createManifest({ platforms: { preview: platforms, formal: platforms } });
+    const kiCore = createKiCore();
+    kiCore.checksums = Object.fromEntries(platforms.map((platform, index) => [platform, String(index + 1).repeat(64)]));
+
+    const plan = resolve({ registry, manifest, requestedPlatforms: platforms, kiCore });
+
+    expect(createProjectDistributionBuildMatrix(plan).include.map(({ platform }) => platform)).toEqual(platforms);
+  });
+
+  it('rejects schema v1 registries and manifests', () => {
+    const registry = createRegistration();
+    registry.schemaVersion = 1;
+    const manifest = createManifest();
+    manifest.schemaVersion = 1;
+
+    expect(() => resolve({ registry })).toThrowError(/unsupported project distribution registry schema/i);
+    expect(() => resolve({ manifest })).toThrowError(/unsupported project distribution manifest schema/i);
+  });
+
+  it('rejects a required platform outside the trusted allowlist', () => {
+    const registry = createRegistration();
+    registry.registrations[0].allowed.requiredPlatforms.formal = ['windows-arm64'];
+
+    expect(() => resolve({ registry })).toThrowError(/required platforms formal must be allowed/i);
+  });
+
+  it('rejects a partial platform request for a multi-platform manifest', () => {
+    const platforms = ['macos-x64', 'macos-arm64', 'windows-x64', 'windows-arm64', 'linux-x64', 'linux-arm64'];
+    const registry = createRegistration();
+    registry.registrations[0].allowed.platforms = { preview: platforms, formal: platforms };
+    const manifest = createManifest({ platforms: { preview: platforms, formal: platforms } });
+
+    expect(() =>
+      resolveFormal({ registry, manifest, requestedPlatforms: ['windows-x64'], kiCore: createKiCore() })
+    ).toThrowError(/must exactly match.*manifest/i);
+  });
+
+  it('isolates formal platforms from the preview platform policy in schema v2', () => {
+    const registry = createRegistration();
+    registry.registrations[0].allowed.platforms = {
+      preview: ['macos-arm64'],
+      formal: ['windows-x64', 'windows-arm64'],
+    };
+    registry.registrations[0].allowed.requiredPlatforms = {
+      preview: [],
+      formal: ['windows-x64', 'windows-arm64'],
+    };
+    const manifest = createManifest({
+      platforms: {
+        preview: ['macos-arm64'],
+        formal: ['windows-x64', 'windows-arm64'],
+      },
+    });
+
+    expect(
+      resolveFormal({ registry, manifest, requestedPlatforms: ['windows-x64', 'windows-arm64'] }).platforms
+    ).toEqual(['windows-x64', 'windows-arm64']);
+    expect(() => resolveFormal({ registry, manifest, requestedPlatforms: ['windows-x64'] })).toThrowError(
+      /must exactly match.*manifest/i
+    );
+    expect(() => resolveFormal({ registry, manifest, requestedPlatforms: ['macos-arm64'] })).toThrowError(
+      /macos-arm64 is not allowed/i
+    );
   });
 
   it('resolves a formal candidate from the protected distribution branch with the approved identity', () => {
@@ -399,14 +634,42 @@ describe('project distribution build contract', () => {
         tag: 'v0.1.73',
         peeledCommit: '4567890abcdef1234567890abcdef12345678901',
       },
-      platform: 'macos-arm64',
-      checksum: '3'.repeat(64),
+      checksums: { 'macos-arm64': '3'.repeat(64) },
       candidate: {
         workflow: 'build-manual.yml',
         runId: 801,
-        artifactName: 'ki-core-candidate-macos-arm64',
+        artifacts: { 'macos-arm64': 'ki-core-candidate-macos-arm64' },
       },
     });
+  });
+
+  it('resolves one immutable plan and build matrix for every selected formal platform', () => {
+    const plan = createMultiPlatformFormalPlan();
+
+    expect(plan.platforms).toEqual([
+      'macos-x64',
+      'macos-arm64',
+      'windows-x64',
+      'windows-arm64',
+      'linux-x64',
+      'linux-arm64',
+    ]);
+    expect(plan.kiCore.checksums).toEqual({
+      'macos-x64': '1'.repeat(64),
+      'macos-arm64': '2'.repeat(64),
+      'windows-x64': '3'.repeat(64),
+      'windows-arm64': '4'.repeat(64),
+      'linux-x64': '5'.repeat(64),
+      'linux-arm64': '6'.repeat(64),
+    });
+    expect(createProjectDistributionBuildMatrix(plan).include).toEqual([
+      expect.objectContaining({ platform: 'macos-x64', os: 'macos-14', runtimePlatform: 'darwin' }),
+      expect.objectContaining({ platform: 'macos-arm64', os: 'macos-14', runtimePlatform: 'darwin' }),
+      expect.objectContaining({ platform: 'windows-x64', os: 'windows-2022', runtimePlatform: 'win32' }),
+      expect.objectContaining({ platform: 'windows-arm64', os: 'windows-11-arm', runtimePlatform: 'win32' }),
+      expect.objectContaining({ platform: 'linux-x64', os: 'ubuntu-latest', runtimePlatform: 'linux' }),
+      expect.objectContaining({ platform: 'linux-arm64', os: 'ubuntu-24.04-arm', runtimePlatform: 'linux' }),
+    ]);
   });
 
   it('rejects unverified Ki-Core candidate sources', () => {
@@ -456,10 +719,11 @@ describe('project distribution build contract', () => {
   it('creates independent immutable records for repeated formal candidate attempts', () => {
     const firstPlan = resolveFormal({ candidate: { runId: 4501, runAttempt: 1 } });
     const secondPlan = resolveFormal({ candidate: { runId: 4501, runAttempt: 2 } });
-    const installer = { platform: 'macos-arm64', fileName: 'ki-buddy-zxjt.dmg', checksum: '6'.repeat(64) };
+    const firstVerifications = createPlatformVerifications(firstPlan);
+    const secondVerifications = createPlatformVerifications(secondPlan);
 
-    const first = createProjectDistributionCandidateRecord(firstPlan, installer);
-    const second = createProjectDistributionCandidateRecord(secondPlan, installer);
+    const first = createProjectDistributionCandidateRecord(firstPlan, firstVerifications);
+    const second = createProjectDistributionCandidateRecord(secondPlan, secondVerifications);
 
     expect(first.attempt).toEqual({ runId: 4501, runAttempt: 1 });
     expect(second.attempt).toEqual({ runId: 4501, runAttempt: 2 });
@@ -467,29 +731,228 @@ describe('project distribution build contract', () => {
   });
 
   it('rejects candidate creation from a preview build plan', () => {
-    const installer = { platform: 'macos-arm64', fileName: 'ki-buddy-zxjt.dmg', checksum: '6'.repeat(64) };
+    const verification = { platform: 'macos-arm64', fileName: 'ki-buddy-zxjt.dmg', checksum: '6'.repeat(64) };
 
-    expect(() => createProjectDistributionCandidateRecord(resolve(), installer)).toThrowError(
+    expect(() => createProjectDistributionCandidateRecord(resolve(), [verification])).toThrowError(
       /validated formal build plan/i
     );
   });
 
-  it('rejects candidate creation with an invalid installer checksum', () => {
-    const installer = { platform: 'macos-arm64', fileName: 'ki-buddy-zxjt.dmg', checksum: 'invalid' };
+  it('creates a candidate only when every selected platform has verified matching provenance', () => {
+    const plan = createMultiPlatformFormalPlan();
+    const verifications = createPlatformVerifications(plan);
 
-    expect(() => createProjectDistributionCandidateRecord(resolveFormal(), installer)).toThrowError(
+    expect(createProjectDistributionCandidateRecord(plan, verifications)).toMatchObject({
+      platforms: ['macos-x64', 'macos-arm64', 'windows-x64', 'windows-arm64', 'linux-x64', 'linux-arm64'],
+      artifacts: [
+        { platform: 'macos-x64', checksum: '4'.repeat(64) },
+        { platform: 'macos-arm64', checksum: '5'.repeat(64) },
+        { platform: 'windows-x64', checksum: '6'.repeat(64) },
+        { platform: 'windows-arm64', checksum: '7'.repeat(64) },
+        { platform: 'linux-x64', checksum: '8'.repeat(64) },
+        { platform: 'linux-arm64', checksum: '9'.repeat(64) },
+      ],
+      attempt: { runId: 4501, runAttempt: 2 },
+    });
+  });
+
+  it.each([
+    ['macos-arm64', 'mac-arm64', '.dmg'],
+    ['windows-x64', 'win-unpacked', '.exe'],
+    ['windows-arm64', 'win-arm64-unpacked', '.exe'],
+  ])(
+    'verifies the %s application materialized from the installer instead of a sibling unpacked directory',
+    (platform, unpackedDirectory, extension) => {
+      const directory = mkdtempSync(resolvePath(tmpdir(), 'project-installer-verification-'));
+      const artifactsRoot = resolvePath(directory, 'artifacts');
+      const plan = createMultiPlatformFormalPlan();
+      const installerName = `ki-buddy-zxjt-${platform}${extension}`;
+      const installerPath = resolvePath(artifactsRoot, installerName);
+      const standaloneEvidencePath = resolvePath(artifactsRoot, 'project-build-evidence.json');
+      const packagedEvidencePath = resolvePath(directory, 'installed', 'project-build-evidence.json');
+      const outputDirectory = resolvePath(directory, 'verified');
+      let cleanupCalled = false;
+      let windowsInstallationChecks = 0;
+      try {
+        mkdirSync(resolvePath(artifactsRoot, unpackedDirectory), { recursive: true });
+        mkdirSync(resolvePath(directory, 'installed'), { recursive: true });
+        writeFileSync(installerPath, 'formal installer');
+        writeFileSync(standaloneEvidencePath, 'immutable evidence');
+        writeFileSync(packagedEvidencePath, 'immutable evidence');
+
+        const result = verifyProjectDistributionArtifact({
+          buildPlan: plan,
+          projectRoot: process.cwd(),
+          artifactsRoot,
+          platform,
+          outputDirectory,
+          materializeInstaller(actualInstallerPath: string) {
+            expect(actualInstallerPath).toBe(installerPath);
+            return {
+              unpackedPath: resolvePath(directory, 'installed'),
+              packageRoot: resolvePath(directory, 'installed'),
+              cleanup() {
+                cleanupCalled = true;
+              },
+            };
+          },
+          verifyUnpacked(
+            _projectRoot: string,
+            unpackedPath: string,
+            _runtimePlatform: string,
+            _identity: unknown,
+            _buildPlan: unknown,
+            _packageRoot: string,
+            options: { expectedPlatform: string }
+          ) {
+            expect(unpackedPath).toBe(resolvePath(directory, 'installed'));
+            expect(options).toEqual({ expectedPlatform: platform });
+            return { buildEvidencePath: packagedEvidencePath };
+          },
+          verifyWindowsInstallation(applicationRoot: string, identity: unknown, expectedPlatform: string) {
+            expect({ applicationRoot, identity, expectedPlatform, cleanupCalled }).toEqual({
+              applicationRoot: resolvePath(directory, 'installed'),
+              identity: plan.packagingIdentity,
+              expectedPlatform: platform,
+              cleanupCalled: false,
+            });
+            windowsInstallationChecks += 1;
+          },
+        });
+
+        expect(result).toMatchObject({ verifiedFromInstaller: true, installer: { platform } });
+        expect(windowsInstallationChecks).toBe(platform.startsWith('windows-') ? 1 : 0);
+        expect(cleanupCalled).toBe(true);
+        expect(readFileSync(resolvePath(outputDirectory, 'installers', installerName), 'utf8')).toBe(
+          'formal installer'
+        );
+        expect(existsSync(resolvePath(outputDirectory, 'project-platform-verification.json'))).toBe(true);
+      } finally {
+        rmSync(directory, { recursive: true, force: true });
+      }
+    }
+  );
+
+  it('does not publish verified output when the installed Windows application fails validation', () => {
+    const directory = mkdtempSync(resolvePath(tmpdir(), 'project-windows-verification-failure-'));
+    const artifactsRoot = resolvePath(directory, 'artifacts');
+    const outputDirectory = resolvePath(directory, 'verified');
+    const plan = createMultiPlatformFormalPlan();
+    let cleanupCalled = false;
+    try {
+      mkdirSync(artifactsRoot, { recursive: true });
+      writeFileSync(resolvePath(artifactsRoot, 'ki-buddy-zxjt.exe'), 'formal installer');
+      writeFileSync(resolvePath(artifactsRoot, 'project-build-evidence.json'), 'immutable evidence');
+
+      expect(() =>
+        verifyProjectDistributionArtifact({
+          buildPlan: plan,
+          projectRoot: process.cwd(),
+          artifactsRoot,
+          platform: 'windows-arm64',
+          outputDirectory,
+          materializeInstaller() {
+            return {
+              unpackedPath: resolvePath(directory, 'installed'),
+              cleanup() {
+                cleanupCalled = true;
+              },
+            };
+          },
+          verifyUnpacked() {
+            return { buildEvidencePath: resolvePath(artifactsRoot, 'project-build-evidence.json') };
+          },
+          verifyWindowsInstallation() {
+            throw new Error('Windows installation verification failed');
+          },
+        })
+      ).toThrow('Windows installation verification failed');
+      expect(cleanupCalled).toBe(true);
+      expect(existsSync(outputDirectory)).toBe(false);
+    } finally {
+      rmSync(directory, { recursive: true, force: true });
+    }
+  });
+
+  it('cleans materialized installer contents when packaged verification fails', () => {
+    const directory = mkdtempSync(resolvePath(tmpdir(), 'project-installer-verification-failure-'));
+    const artifactsRoot = resolvePath(directory, 'artifacts');
+    const plan = resolveFormal();
+    let cleanupCalled = false;
+    try {
+      mkdirSync(artifactsRoot, { recursive: true });
+      writeFileSync(resolvePath(artifactsRoot, 'ki-buddy-zxjt.dmg'), 'formal installer');
+      writeFileSync(resolvePath(artifactsRoot, 'project-build-evidence.json'), 'immutable evidence');
+
+      expect(() =>
+        verifyProjectDistributionArtifact({
+          buildPlan: plan,
+          projectRoot: process.cwd(),
+          artifactsRoot,
+          platform: 'macos-arm64',
+          outputDirectory: resolvePath(directory, 'verified'),
+          materializeInstaller() {
+            return {
+              unpackedPath: resolvePath(directory, 'installed'),
+              packageRoot: resolvePath(directory, 'installed'),
+              cleanup() {
+                cleanupCalled = true;
+              },
+            };
+          },
+          verifyUnpacked() {
+            throw new Error('packaged verification failed');
+          },
+        })
+      ).toThrow('packaged verification failed');
+      expect(cleanupCalled).toBe(true);
+      expect(existsSync(resolvePath(directory, 'verified'))).toBe(false);
+    } finally {
+      rmSync(directory, { recursive: true, force: true });
+    }
+  });
+
+  it('rejects candidate creation when a selected platform verification is missing', () => {
+    const plan = createMultiPlatformFormalPlan();
+    const verifications = createPlatformVerifications(plan);
+
+    expect(() => createProjectDistributionCandidateRecord(plan, verifications.slice(0, -1))).toThrowError(
+      /must cover every selected platform/i
+    );
+  });
+
+  it('rejects candidate creation when an installer checksum is invalid', () => {
+    const plan = resolveFormal();
+    const verification = structuredClone(
+      createProjectDistributionPlatformVerification(plan, {
+        platform: 'macos-arm64',
+        fileName: 'ki-buddy-zxjt.dmg',
+        checksum: '6'.repeat(64),
+      })
+    );
+    verification.artifact.checksum = 'invalid';
+
+    expect(() => createProjectDistributionCandidateRecord(plan, [verification])).toThrowError(
       /checksum must be SHA-256/i
     );
   });
 
-  it('leaves no candidate record when candidate creation fails', () => {
+  it('rejects candidate creation when platform provenance does not match the shared build plan', () => {
+    const plan = createMultiPlatformFormalPlan();
+    const verifications = createPlatformVerifications(plan);
+    verifications[1] = { ...verifications[1], buildPlanDigest: 'f'.repeat(64) };
+
+    expect(() => createProjectDistributionCandidateRecord(plan, verifications)).toThrowError(/provenance.*build plan/i);
+  });
+
+  it('rejects legacy candidate creation without platform verification evidence', () => {
     const directory = mkdtempSync(resolvePath(tmpdir(), 'project-candidate-failure-'));
-    const buildPlanPath = resolvePath(directory, 'preview-plan.json');
+    const buildPlanPath = resolvePath(directory, 'formal-plan.json');
     const installerPath = resolvePath(directory, 'candidate.dmg');
     const outputPath = resolvePath(directory, 'project-candidate.json');
     const scriptPath = resolvePath(process.cwd(), 'packages/shared-scripts/src/projectDistribution.js');
     try {
-      writeFileSync(buildPlanPath, JSON.stringify(resolve()));
+      writeFileSync(buildPlanPath, JSON.stringify(resolveFormal()));
       writeFileSync(installerPath, 'not a verified formal package');
 
       expect(() =>
@@ -504,6 +967,54 @@ describe('project distribution build contract', () => {
             installerPath,
             '--platform',
             'macos-arm64',
+            '--output',
+            outputPath,
+          ],
+          { stdio: 'ignore' }
+        )
+      ).toThrow();
+      expect(existsSync(outputPath)).toBe(false);
+    } finally {
+      rmSync(directory, { recursive: true, force: true });
+    }
+  });
+
+  it('recomputes verified installer checksums before the CLI writes an atomic candidate', () => {
+    const directory = mkdtempSync(resolvePath(tmpdir(), 'project-candidate-aggregate-'));
+    const buildPlanPath = resolvePath(directory, 'formal-plan.json');
+    const verificationsPath = resolvePath(directory, 'verifications', 'macos-arm64');
+    const installerPath = resolvePath(verificationsPath, 'installers', 'ki-buddy-zxjt.dmg');
+    const verificationPath = resolvePath(verificationsPath, 'project-platform-verification.json');
+    const outputPath = resolvePath(directory, 'project-candidate.json');
+    const scriptPath = resolvePath(process.cwd(), 'packages/shared-scripts/src/projectDistribution.js');
+    const buildPlan = resolveFormal();
+    try {
+      mkdirSync(resolvePath(verificationsPath, 'installers'), { recursive: true });
+      writeFileSync(buildPlanPath, JSON.stringify(buildPlan));
+      writeFileSync(installerPath, 'verified installer');
+      const checksum = require('node:crypto').createHash('sha256').update('verified installer').digest('hex');
+      writeFileSync(
+        verificationPath,
+        JSON.stringify(
+          createProjectDistributionPlatformVerification(buildPlan, {
+            platform: 'macos-arm64',
+            fileName: 'ki-buddy-zxjt.dmg',
+            checksum,
+          })
+        )
+      );
+      writeFileSync(installerPath, 'tampered installer');
+
+      expect(() =>
+        execFileSync(
+          process.execPath,
+          [
+            scriptPath,
+            'create-candidate',
+            '--build-plan',
+            buildPlanPath,
+            '--verifications',
+            resolvePath(directory, 'verifications'),
             '--output',
             outputPath,
           ],

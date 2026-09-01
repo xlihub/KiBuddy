@@ -1,5 +1,5 @@
 {
-  "schemaVersion": 1,
+  "schemaVersion": 2,
   "registrations": [
     {
       "distributionId": "zxjt",
@@ -24,7 +24,14 @@
         }
       },
       "allowed": {
-        "platforms": ["macos-arm64"],
+        "platforms": {
+          "preview": ["macos-arm64"],
+          "formal": ["windows-x64", "windows-arm64"]
+        },
+        "requiredPlatforms": {
+          "preview": ["macos-arm64"],
+          "formal": ["windows-x64", "windows-arm64"]
+        },
         "integrations": [],
         "disabledFeatures": ["account", "about", "feedback", "githubResources"],
         "nonSensitiveConfigKeys": [],
