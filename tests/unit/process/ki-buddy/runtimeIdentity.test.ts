@@ -12,6 +12,8 @@ import {
   KI_BUDDY_PRODUCT_RUNTIME,
   readKiBuddyRuntimeIdentity,
   resolveKiBuddyProtocolScheme,
+  resolveKiBuddyCliSafeDirectoryNames,
+  resolveKiBuddyUserDataPath,
   resolveKiBuddyRuntimeIdentity,
   shouldEnableKiBuddyRuntime,
   shouldEnsureDefaultCoreUser,
@@ -64,6 +66,37 @@ describe('Ki-Buddy product runtime identity', () => {
   });
 
   it('does not initialize the default Core user for the Ki-Buddy desktop runtime', () => {
-    expect(shouldEnsureDefaultCoreUser(true)).toBe(false);
+    expect(shouldEnsureDefaultCoreUser(true, 'agents')).toBe(false);
+  });
+
+  it('uses an isolated user-data directory and default Core user for a local project distribution', () => {
+    expect(shouldEnsureDefaultCoreUser(true, 'local')).toBe(true);
+    expect(
+      resolveKiBuddyUserDataPath('/Users/test/Library/Application Support', {
+        config: {
+          distribution: {
+            dataDirectory: 'Ki-Buddy-ZXJT-Preview',
+          },
+        },
+        error: null,
+      } as never)
+    ).toBe(join('/Users/test/Library/Application Support', 'Ki-Buddy-ZXJT-Preview'));
+    expect(
+      resolveKiBuddyCliSafeDirectoryNames({
+        config: {
+          distribution: {
+            dataDirectory: 'Ki-Buddy-ZXJT-Preview',
+          },
+        },
+        error: null,
+      } as never)
+    ).toEqual({
+      config: '.ki-buddy-zxjt-preview-config',
+      data: '.ki-buddy-zxjt-preview',
+    });
+  });
+
+  it('keeps the generic Ki-Buddy user-data path when no distribution identity exists', () => {
+    expect(resolveKiBuddyUserDataPath('/tmp/app-data')).toBeNull();
   });
 });

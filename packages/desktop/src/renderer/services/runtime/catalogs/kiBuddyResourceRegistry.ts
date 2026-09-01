@@ -1,4 +1,4 @@
-import type { ProductFeatureId, ProductResourceOrigin } from '@/common/platform/ki-buddy';
+import type { KiBuddyProductIntegration, ProductFeatureId, ProductResourceOrigin } from '@/common/platform/ki-buddy';
 import type { IMcpServer } from '@/common/config/storage';
 import type { Assistant } from '@/common/types/agent/assistantTypes';
 import type { KiBuddyProductRuntime } from '../kiBuddyRuntime';
@@ -6,6 +6,7 @@ import type { KiBuddyProductRuntime } from '../kiBuddyRuntime';
 type ProductResourceDefinition = Readonly<{
   featureId: ProductFeatureId;
   id: string;
+  requiredIntegrations?: readonly KiBuddyProductIntegration[];
   resourceName?: string;
 }>;
 
@@ -27,6 +28,7 @@ const KI_CLI_AGENT = {
 const AGENTS_MCP_ADAPTER = {
   id: 'builtin:agents-mcp-adapter',
   featureId: 'tools',
+  requiredIntegrations: ['agentsGateway'],
   resourceName: 'agents-mcp-adapter',
   backendName: 'agents-mcp-adapter',
   scriptName: 'builtin-mcp-agents.js',
@@ -78,6 +80,7 @@ export const KI_BUDDY_PRODUCT_RESOURCE_REGISTRY = {
       id: 'agents-executor',
       featureId: 'assistants',
       source: 'builtin',
+      requiredIntegrations: ['agentsGateway'],
       requiredMcpResourceIds: [AGENTS_MCP_ADAPTER.id],
     },
     kiCli: {
@@ -110,12 +113,21 @@ export const KI_BUDDY_PRODUCT_RESOURCE_REGISTRY = {
       id: 'builtin:ki-buddy-agents-execution',
       featureId: 'skills',
       backendName: 'ki-buddy-agents-execution',
+      requiredIntegrations: ['agentsGateway'],
     },
   },
   mcp: {
     agentsAdapter: AGENTS_MCP_ADAPTER,
   },
 } as const;
+
+/** Reports whether every integration required by a product resource is available. */
+export function areKiBuddyProductResourceIntegrationsEnabled(
+  definition: Readonly<{ id: string; requiredIntegrations?: readonly KiBuddyProductIntegration[] }>,
+  integrations: readonly KiBuddyProductIntegration[]
+): boolean {
+  return definition.requiredIntegrations?.every((integration) => integrations.includes(integration)) ?? true;
+}
 
 /** Identifies the product-owned Adapter using the complete registration shape available without Ki-Core changes. */
 export function resolveKiBuddyProductMcpResourceId(
@@ -158,12 +170,21 @@ export type KiBuddyAssistantEffectiveMcpSelection = Readonly<{
 
 /** Applies product MCP requirements and reports any required resources missing from the backend catalog. */
 export function resolveKiBuddyAssistantEffectiveMcpSelection(
-  productRuntime: Pick<KiBuddyProductRuntime, 'id'> | null,
+  productRuntime: Pick<KiBuddyProductRuntime, 'id' | 'integrations'> | null,
   assistantIdentity: Pick<Assistant, 'id' | 'source'> | null | undefined,
   servers: readonly Pick<IMcpServer, 'builtin' | 'id' | 'name' | 'transport'>[],
   selectedServerIds: readonly string[]
 ): KiBuddyAssistantEffectiveMcpSelection {
   if (!productRuntime) return { missingRequiredResourceIds: [], serverIds: [...selectedServerIds] };
+  if (!productRuntime.integrations.includes('agentsGateway')) {
+    const unavailableAdapterServerIds = new Set(
+      servers.filter((server) => resolveKiBuddyProductMcpResourceId(server) !== null).map(({ id }) => id)
+    );
+    return {
+      missingRequiredResourceIds: [],
+      serverIds: selectedServerIds.filter((serverId) => !unavailableAdapterServerIds.has(serverId)),
+    };
+  }
 
   const assistant = KI_BUDDY_PRODUCT_RESOURCE_REGISTRY.assistant.agentsExecution;
   if (assistantIdentity?.id !== assistant.id || assistantIdentity.source !== assistant.source) {
@@ -188,7 +209,7 @@ export function resolveKiBuddyAssistantEffectiveMcpSelection(
 
 /** Applies required MCP resources only when the explicit Ki-Buddy runtime capability is present. */
 export function resolveKiBuddyAssistantEffectiveMcpServerIds(
-  productRuntime: Pick<KiBuddyProductRuntime, 'id'> | null,
+  productRuntime: Pick<KiBuddyProductRuntime, 'id' | 'integrations'> | null,
   assistantIdentity: Pick<Assistant, 'id' | 'source'> | null | undefined,
   servers: readonly Pick<IMcpServer, 'builtin' | 'id' | 'name' | 'transport'>[],
   selectedServerIds: readonly string[]

@@ -1,0 +1,66 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://github.com/xlihub/KiBuddy/distributions/schemas/registration.schema.json",
+  "title": "Ki-Buddy project distribution registry",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["schemaVersion", "registrations"],
+  "properties": {
+    "schemaVersion": { "const": 1 },
+    "registrations": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["distributionId", "lifecycle", "identityMode", "identities", "allowed"],
+        "properties": {
+          "distributionId": { "type": "string", "pattern": "^[a-z0-9]+(?:-[a-z0-9]+)*$" },
+          "lifecycle": { "enum": ["active", "suspended", "retired"] },
+          "identityMode": { "enum": ["local", "agents"] },
+          "identities": {
+            "type": "object",
+            "additionalProperties": false,
+            "required": ["formal", "preview"],
+            "properties": {
+              "formal": { "$ref": "#/$defs/identity" },
+              "preview": { "$ref": "#/$defs/identity" }
+            }
+          },
+          "allowed": {
+            "type": "object",
+            "additionalProperties": false,
+            "required": ["platforms", "integrations", "disabledFeatures", "nonSensitiveConfigKeys"],
+            "properties": {
+              "platforms": { "type": "array", "items": { "type": "string" }, "uniqueItems": true },
+              "integrations": { "type": "array", "items": { "type": "string" }, "uniqueItems": true },
+              "disabledFeatures": { "type": "array", "items": { "type": "string" }, "uniqueItems": true },
+              "nonSensitiveConfigKeys": { "type": "array", "items": { "type": "string" }, "uniqueItems": true }
+            }
+          }
+        }
+      }
+    }
+  },
+  "$defs": {
+    "identity": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "appId",
+        "applicationName",
+        "executableName",
+        "protocolScheme",
+        "dataDirectory",
+        "credentialNamespace"
+      ],
+      "properties": {
+        "appId": { "type": "string" },
+        "applicationName": { "type": "string", "pattern": "^[A-Za-z0-9][A-Za-z0-9 ._-]*$" },
+        "executableName": { "type": "string", "pattern": "^[A-Za-z0-9][A-Za-z0-9._-]*$" },
+        "protocolScheme": { "type": "string" },
+        "dataDirectory": { "type": "string", "pattern": "^[A-Za-z0-9][A-Za-z0-9._-]*$" },
+        "credentialNamespace": { "type": "string", "pattern": "^[a-z0-9]+(?:-[a-z0-9]+)*$" }
+      }
+    }
+  }
+}

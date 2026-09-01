@@ -186,7 +186,17 @@ function walkFiles(dir, acc = []) {
   return acc;
 }
 
-function computeSourceHash() {
+function canonicalizeBuildInput(value) {
+  if (Array.isArray(value)) return value.map(canonicalizeBuildInput);
+  if (!value || typeof value !== 'object') return value;
+  return Object.fromEntries(
+    Object.keys(value)
+      .sort()
+      .map((key) => [key, canonicalizeBuildInput(value[key])])
+  );
+}
+
+function computeSourceHash(projectBuildPlan) {
   const hash = crypto.createHash('md5');
   const rootDir = path.resolve(__dirname, '..');
   const filesToHash = [
@@ -225,6 +235,9 @@ function computeSourceHash() {
       hash.update(String(stat.mtimeMs));
     }
   }
+
+  hash.update('project-build-plan:');
+  hash.update(projectBuildPlan ? JSON.stringify(canonicalizeBuildInput(projectBuildPlan)) : 'none');
 
   return hash.digest('hex');
 }
@@ -360,14 +373,19 @@ function validateViteBuildOutput() {
   return { valid: problems.length === 0, problems };
 }
 
-function shouldSkipViteBuild(skipViteFlag, forceFlag) {
+function shouldSkipViteBuild(skipViteFlag, forceFlag, projectBuildPlan) {
   if (forceFlag) return false;
-  if (skipViteFlag) return true;
 
-  // Auto-detect: skip if build exists and hash matches
-  const currentHash = computeSourceHash();
+  const currentHash = computeSourceHash(projectBuildPlan);
   const cachedHash = loadCachedHash();
 
+  if (skipViteFlag) {
+    if (cachedHash && currentHash === cachedHash && viteBuildExists()) return true;
+    console.warn('--skip-vite requested but build inputs changed or output is incomplete; rebuilding.');
+    return false;
+  }
+
+  // Auto-detect: skip if build exists and hash matches
   if (cachedHash && currentHash === cachedHash && viteBuildExists()) {
     console.log('📦 Incremental build: Vite output unchanged, skipping compilation');
     return true;
@@ -679,7 +697,14 @@ if (forceBuild) console.log('⚡ --force: Force full rebuild');
 const packageJsonPath = path.resolve(__dirname, '../package.json');
 
 try {
-  const buildVersionOverride = getBuildVersionOverride();
+  const projectBuildPlanPath = process.env.KI_BUDDY_RESOLVED_BUILD_PLAN;
+  const projectBuildPlan = projectBuildPlanPath
+    ? JSON.parse(fs.readFileSync(path.resolve(projectBuildPlanPath), 'utf8'))
+    : null;
+  if (projectBuildPlan && (projectBuildPlan.schemaVersion !== 1 || projectBuildPlan.mode !== 'preview')) {
+    throw new Error('KI_BUDDY_RESOLVED_BUILD_PLAN must contain a validated preview build plan');
+  }
+  const buildVersionOverride = projectBuildPlan?.version ?? getBuildVersionOverride();
 
   // 1. Ensure package.json main entry is correct for electron-vite
   const packageJson = JSON.parse(fs.readFileSync(packageJsonPath, 'utf8'));
@@ -688,7 +713,7 @@ try {
   }
 
   // 2. Check if we can skip Vite build (incremental build)
-  const skipViteBuild = shouldSkipViteBuild(skipVite, forceBuild);
+  const skipViteBuild = shouldSkipViteBuild(skipVite, forceBuild, projectBuildPlan);
 
   if (!skipViteBuild) {
     // Run electron-vite to build all bundles (main + preload + renderer)
@@ -703,7 +728,7 @@ try {
     });
 
     // Save hash after successful build
-    saveCurrentHash(computeSourceHash());
+    saveCurrentHash(computeSourceHash(projectBuildPlan));
   } else {
     console.log('📦 Using cached Vite build output');
   }
@@ -741,6 +766,7 @@ try {
 
   // 5. Prepare aioncore binary (for packaged runtime usage)
   const { prepareAioncore } = require('../packages/shared-scripts/src/prepare-aioncore.js');
+  const { readKiCorePin } = require('../packages/shared-scripts/src/kiCoreRelease.js');
   const {
     createElectronBuilderConfig,
     readProductConfig,
@@ -749,14 +775,46 @@ try {
   const projectRoot = path.resolve(__dirname, '..');
   const builderConfigPath = path.join(projectRoot, 'out', 'ki-buddy-electron-builder.json');
   const productConfig = readProductConfig(projectRoot);
-  const productExecutableName = productConfig.electronBuilder.executableName;
-  createElectronBuilderConfig(projectRoot, builderConfigPath, { version: buildVersionOverride });
+  if (projectBuildPlan) {
+    const productPin = readKiCorePin(projectRoot);
+    const plannedKiCore = projectBuildPlan.kiCore;
+    const plannedPin = {
+      repository: plannedKiCore.repository,
+      tag: plannedKiCore.tag,
+      commit: plannedKiCore.commit,
+      aionCore: plannedKiCore.aionCore,
+      checksum: plannedKiCore.checksum,
+    };
+    const selectedProductPin = {
+      repository: productPin.repository,
+      tag: productPin.tag,
+      commit: productPin.commit,
+      aionCore: productPin.aionCore,
+      checksum: productPin.checksums[plannedKiCore.platform],
+    };
+    if (JSON.stringify(plannedPin) !== JSON.stringify(selectedProductPin)) {
+      throw new Error('Resolved project build plan Ki-Core provenance does not match the product pin');
+    }
+  }
+  const productExecutableName =
+    projectBuildPlan?.packagingIdentity.desktop.executableName ?? productConfig.electronBuilder.executableName;
+  createElectronBuilderConfig(projectRoot, builderConfigPath, {
+    version: buildVersionOverride,
+    ...(projectBuildPlan
+      ? {
+          commit: projectBuildPlan.source.commit,
+          distributionBuildPlan: projectBuildPlan,
+          packagingOverlay: projectBuildPlan.packagingIdentity,
+        }
+      : {}),
+  });
   writeGeneratedSentryDsnInclude(projectRoot);
   prepareAioncore({
     projectRoot,
     platform: process.platform,
     arch: targetArch,
-    version: resolveAioncoreVersion(projectRoot),
+    version: resolveAioncoreVersion(projectRoot, projectBuildPlan ? 'release-pinned' : undefined),
+    sourcePolicy: projectBuildPlan ? 'release-pinned' : undefined,
   });
 
   // 6. Prepare hub resources (index.json + extension zips for offline fallback)

@@ -4,6 +4,7 @@ import {
   PRODUCT_RESOURCE_ORIGINS,
   evaluateProductBuiltinResourceState,
   projectProductResources,
+  type KiBuddyProductIntegration,
   type ProductBuiltinResourceRequirement,
   type ProductBuiltinResourceState,
   type ProductExperience,
@@ -13,8 +14,9 @@ import {
 } from '@/common/platform/ki-buddy';
 import { getClientBusinessSetting } from '@/renderer/services/clientBusinessSettings';
 import { reportHiddenProductResources } from '@/renderer/services/runtime/catalogs/kiBuddyProductResourceDiagnostics';
-import { getProductExperience } from '@/renderer/services/runtime/kiBuddyRuntime';
+import { getKiBuddyProductRuntime, getProductExperience } from '@/renderer/services/runtime/kiBuddyRuntime';
 import {
+  areKiBuddyProductResourceIntegrationsEnabled,
   KI_BUDDY_PRODUCT_RESOURCE_REGISTRY,
   resolveKiBuddyProductMcpResourceId,
 } from '@/renderer/services/runtime/catalogs/kiBuddyResourceRegistry';
@@ -68,9 +70,14 @@ export const isProductMcpOriginVisible = (experience: ProductExperience, origin:
   experience.resourceAccess('mcp', origin) !== 'hidden';
 
 /** Product-owned MCP requirements registered by features such as the future Agents Adapter integration. */
-export const PRODUCT_BUILTIN_MCP_REQUIREMENTS: readonly ProductBuiltinResourceRequirement[] = Object.values(
-  KI_BUDDY_PRODUCT_RESOURCE_REGISTRY.mcp
-).map(({ id, featureId, resourceName }) => ({ resourceId: id, featureId, resourceName }));
+const productBuiltinMcpRequirements = (
+  integrations: readonly KiBuddyProductIntegration[]
+): readonly ProductBuiltinResourceRequirement[] =>
+  Object.values(KI_BUDDY_PRODUCT_RESOURCE_REGISTRY.mcp)
+    .filter((definition) => areKiBuddyProductResourceIntegrationsEnabled(definition, integrations))
+    .map(({ id, featureId, resourceName }) => ({ resourceId: id, featureId, resourceName }));
+
+export const PRODUCT_BUILTIN_MCP_REQUIREMENTS = productBuiltinMcpRequirements(['agentsGateway']);
 
 /** Returns the stable key used to reconcile MCP catalog entries across backend and local sources. */
 export const getMcpCatalogServerKey = (server: Pick<IMcpServer, 'id' | 'name' | 'builtin'>) => {
@@ -134,17 +141,39 @@ export const toSessionMcpServer = (server: Pick<IMcpServer, 'id' | 'name' | 'tra
 /** Applies the active product resource policy to trusted MCP catalog candidates. */
 export const projectMcpCatalogCandidates = (
   candidates: readonly McpCatalogCandidate[],
-  experience: ProductExperience
+  experience: ProductExperience,
+  integrations: readonly KiBuddyProductIntegration[] = ['agentsGateway']
 ): Readonly<{ entries: readonly McpCatalogEntry[]; hiddenResources: readonly ProductResourceHiddenRecord[] }> => {
+  const unavailableProductResources = candidates.flatMap(({ origin, productResourceId, server }) => {
+    if (origin !== 'productBuiltin' || !productResourceId) return [];
+    const definition = Object.values(KI_BUDDY_PRODUCT_RESOURCE_REGISTRY.mcp).find(
+      (candidate) => candidate.id === productResourceId
+    );
+    return definition && !areKiBuddyProductResourceIntegrationsEnabled(definition, integrations)
+      ? [
+          {
+            code: 'product_resource_hidden' as const,
+            kind: 'mcp' as const,
+            resourceId: productResourceId,
+            resourceName: server.name,
+            origin: 'productBuiltin' as const,
+            access: 'hidden' as const,
+          },
+        ]
+      : [];
+  });
+  const unavailableResourceIds = new Set(unavailableProductResources.map(({ resourceId }) => resourceId));
   const projection = projectProductResources(
     experience,
     'mcp',
-    candidates.map(({ server, origin, productResourceId }) => ({
-      id: productResourceId ?? server.id,
-      name: server.name,
-      origin,
-      server,
-    }))
+    candidates
+      .filter(({ productResourceId }) => !productResourceId || !unavailableResourceIds.has(productResourceId))
+      .map(({ server, origin, productResourceId }) => ({
+        id: productResourceId ?? server.id,
+        name: server.name,
+        origin,
+        server,
+      }))
   );
   return {
     entries: projection.visible.map(({ resource, access }) => ({
@@ -152,14 +181,16 @@ export const projectMcpCatalogCandidates = (
       origin: resource.origin,
       access,
     })),
-    hiddenResources: projection.hidden,
+    hiddenResources: [...unavailableProductResources, ...projection.hidden],
   };
 };
 
 /** Evaluates registered product MCP requirements once the backend catalog can authoritatively answer. */
 export async function loadProductBuiltinMcpResourceState(
   experience: ProductExperience = getProductExperience(),
-  requirements: readonly ProductBuiltinResourceRequirement[] = PRODUCT_BUILTIN_MCP_REQUIREMENTS
+  requirements: readonly ProductBuiltinResourceRequirement[] = productBuiltinMcpRequirements(
+    getKiBuddyProductRuntime()?.integrations ?? ['agentsGateway']
+  )
 ): Promise<ProductBuiltinResourceState> {
   const pendingState = evaluateProductBuiltinResourceState(experience, 'mcp', {
     availableResourceIds: [],
@@ -190,7 +221,8 @@ export async function loadProductBuiltinMcpResourceState(
 
 /** Loads, deduplicates, and projects backend and local built-in MCP records into one catalog. */
 export const ensureBackendMcpCatalog = async (
-  experience: ProductExperience = getProductExperience()
+  experience: ProductExperience = getProductExperience(),
+  integrations: readonly KiBuddyProductIntegration[] = getKiBuddyProductRuntime()?.integrations ?? ['agentsGateway']
 ): Promise<{
   userServers: IMcpServer[];
   builtinServers: IMcpServer[];
@@ -205,9 +237,10 @@ export const ensureBackendMcpCatalog = async (
   const projection = projectMcpCatalogCandidates(
     dedupeCandidates([
       ...allBackendServers.map((server) => ({ server, ...resolveBackendMcpIdentity(server) })),
-      ...allBuiltinServers.map((server) => ({ server, origin: 'upstreamBuiltin' as const })),
+      ...allBuiltinServers.map((server) => ({ server, ...resolveBackendMcpIdentity(server) })),
     ]),
-    experience
+    experience,
+    integrations
   );
   reportHiddenProductResources('mcp', projection.hiddenResources);
 

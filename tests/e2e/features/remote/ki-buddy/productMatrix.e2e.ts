@@ -248,7 +248,7 @@ test.describe.serial('Ki-Buddy packaged first-release product matrix', () => {
       error: null,
       capability: {
         id: 'ki-buddy',
-        schemaVersion: 3,
+        schemaVersion: 4,
         experience: {
           schemaVersion: 1,
           features: FIRST_RELEASE_MATRIX.features,
@@ -803,13 +803,24 @@ test.describe.serial('Ki-Buddy packaged first-release product matrix', () => {
     await expect(customEntry).toBeVisible();
 
     await productApp.page.unroute(mcpListPattern);
-    const editedBackendMcps = await httpInvoke<
-      Array<{ id: string; original_json?: string; transport?: { args?: string[] } }>
-    >(productApp.page, 'GET', '/api/mcp/servers');
-    const editedBackendMcp = editedBackendMcps.find(({ id }) => id === customMcpId);
-    expect(editedBackendMcp).toBeTruthy();
-    expect(editedBackendMcp?.transport?.args).toContain('--help');
-    expect(editedBackendMcp?.original_json).toContain('--help');
+    await expect
+      .poll(
+        async () => {
+          const editedBackendMcps = await httpInvoke<
+            Array<{ id: string; original_json?: string; transport?: { args?: string[] } }>
+          >(productApp.page, 'GET', '/api/mcp/servers');
+          const editedBackendMcp = editedBackendMcps.find(({ id }) => id === customMcpId);
+          return {
+            args: editedBackendMcp?.transport?.args ?? [],
+            originalJson: editedBackendMcp?.original_json ?? '',
+          };
+        },
+        { timeout: 20_000 }
+      )
+      .toEqual({
+        args: expect.arrayContaining(['--help']),
+        originalJson: expect.stringContaining('--help'),
+      });
 
     const deleteCustomMcp = productApp.page.getByTestId(`mcp-delete-${customMcpId}`);
     await revealHoverMenu(customEntry, manageCustomMcp, deleteCustomMcp);

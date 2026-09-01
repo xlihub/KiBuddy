@@ -72,6 +72,52 @@ describe('projectProductSkillCatalog', () => {
     ).toEqual([]);
   });
 
+  it('hides the Agents execution Skill when the Agents Gateway integration is unavailable', () => {
+    const result = projectProductSkillCatalog(
+      [
+        {
+          name: 'ki-buddy-agents-execution',
+          description: 'Agents execution',
+          location: '/builtin/ki-buddy-agents-execution/SKILL.md',
+          relative_location: 'ki-buddy-agents-execution/SKILL.md',
+          is_auto_inject: false,
+          is_custom: false,
+          source: 'builtin',
+        },
+      ],
+      createKiBuddyProductExperience(productConfig.experience),
+      []
+    );
+
+    expect(result.visibleSkills).toEqual([]);
+    expect(result.hiddenResources).toContainEqual(
+      expect.objectContaining({ resourceId: 'builtin:ki-buddy-agents-execution', origin: 'productBuiltin' })
+    );
+  });
+
+  it('keeps a Custom Skill with the Agents execution name when the Agents Gateway integration is unavailable', () => {
+    const customSkill = {
+      name: 'ki-buddy-agents-execution',
+      description: 'User-defined workflow',
+      location: '/custom/ki-buddy-agents-execution/SKILL.md',
+      relative_location: 'ki-buddy-agents-execution/SKILL.md',
+      is_auto_inject: false,
+      is_custom: true,
+      source: 'custom' as const,
+    };
+
+    const result = projectProductSkillCatalog(
+      [customSkill],
+      createKiBuddyProductExperience(productConfig.experience),
+      []
+    );
+
+    expect(result.entries).toEqual([
+      expect.objectContaining({ resourceId: 'custom:ki-buddy-agents-execution', origin: 'custom', access: 'manage' }),
+    ]);
+    expect(result.visibleSkills).toEqual([customSkill]);
+  });
+
   it('shows Office, Custom, and non-excluded auto-injected skills while recording hidden resources', () => {
     const result = projectProductSkillCatalog(
       [

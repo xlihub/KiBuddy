@@ -122,6 +122,79 @@ childProcess.execSync = function mockedExecSync(command) {
     }
   });
 
+  it('rebuilds Vite output when switching between default and project build plans', () => {
+    const outDir = resolve(repoRoot, 'out');
+    const tempDir = mkdtempSync(join(tmpdir(), 'aionui-build-plan-cache-test-'));
+    const backupOutDir = resolve(repoRoot, `.tmp-out-backup-${process.pid}-${randomUUID()}`);
+    const hookPath = join(tempDir, 'hook.cjs');
+    const callsPath = join(tempDir, 'vite-calls.txt');
+    const planPath = join(tempDir, 'project-build-plan.json');
+
+    writeFileSync(
+      hookPath,
+      `
+const childProcess = require('node:child_process');
+const fs = require('node:fs');
+const path = require('node:path');
+
+function ensurePlaceholder(relativePath) {
+  const target = path.join(process.cwd(), relativePath);
+  fs.mkdirSync(path.dirname(target), { recursive: true });
+  fs.writeFileSync(target, '');
+}
+
+childProcess.execSync = function mockedExecSync(command) {
+  if (String(command).includes('electron-vite build')) {
+    fs.appendFileSync(process.env.AIONUI_VITE_CALLS_FILE, 'vite\\n');
+    ensurePlaceholder('out/main/index.js');
+    ensurePlaceholder('out/preload/index.js');
+    ensurePlaceholder('out/renderer/assets/index-test.js');
+    ensurePlaceholder('out/renderer/assets/index-test.css');
+    fs.writeFileSync(
+      path.join(process.cwd(), 'out/renderer/index.html'),
+      '<!doctype html><html><head><script type="module" src="./assets/index-test.js"></script><link rel="stylesheet" href="./assets/index-test.css"></head><body><div id="root"></div></body></html>\\n'
+    );
+  }
+  return Buffer.from('');
+};
+`,
+      'utf8'
+    );
+    writeFileSync(planPath, JSON.stringify({ schemaVersion: 1, mode: 'preview' }), 'utf8');
+
+    let movedExistingOut = false;
+    try {
+      if (existsSync(outDir)) {
+        renameSync(outDir, backupOutDir);
+        movedExistingOut = true;
+      }
+
+      const runBuild = (buildPlanPath?: string) =>
+        spawnSync(process.execPath, ['scripts/build-with-builder.js', 'arm64', '--pack-only'], {
+          cwd: repoRoot,
+          encoding: 'utf8',
+          env: {
+            ...process.env,
+            AIONUI_VITE_CALLS_FILE: callsPath,
+            KI_BUDDY_RESOLVED_BUILD_PLAN: buildPlanPath ?? '',
+            NODE_OPTIONS: [process.env.NODE_OPTIONS, `--require=${hookPath}`].filter(Boolean).join(' '),
+          },
+        });
+
+      const defaultBuild = runBuild();
+      expect(defaultBuild.status, defaultBuild.stderr || defaultBuild.stdout).toBe(0);
+      const projectBuild = runBuild(planPath);
+      expect(projectBuild.status, projectBuild.stderr || projectBuild.stdout).toBe(0);
+      const restoredDefaultBuild = runBuild();
+      expect(restoredDefaultBuild.status, restoredDefaultBuild.stderr || restoredDefaultBuild.stdout).toBe(0);
+      expect(readFileSync(callsPath, 'utf8').trim().split('\n')).toHaveLength(3);
+    } finally {
+      rmSync(outDir, { recursive: true, force: true });
+      if (movedExistingOut) renameSync(backupOutDir, outDir);
+      rmSync(tempDir, { recursive: true, force: true });
+    }
+  });
+
   it('releases the NSIS output directory before any update repair or uninstall work', () => {
     const script = readFileSync(resolve(repoRoot, 'resources/windows/installer-update-verify.nsh'), 'utf8');
     const preInit = script.match(/!macro AIONUI_INSTALLER_PREINIT([\s\S]*?)!macroend/)?.[1];

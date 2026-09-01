@@ -22,6 +22,7 @@ export {
   createKiBuddyProductExperience,
   deepFreeze,
   evaluateProductBuiltinResourceState,
+  isProductFeatureEnabled,
   parseProductExperiencePolicy,
   projectProductResources,
 } from './experience';
@@ -47,4 +48,4 @@ export {
   KI_BUDDY_PRODUCT_BOOTSTRAP_CHANNEL,
   isKiBuddyCoreSafeMethod,
 } from './channels';
-export type { KiBuddyProductConfig, KiBuddyProductConfigLoadResult } from './productConfig';
+export type { KiBuddyProductConfig, KiBuddyProductConfigLoadResult, KiBuddyProductIntegration } from './productConfig';

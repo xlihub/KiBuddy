@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import { execFileSync } from 'node:child_process';
-import { createHash } from 'node:crypto';
-import { copyFileSync, existsSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
+import { createHash, randomUUID } from 'node:crypto';
+import { copyFileSync, existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join, resolve } from 'node:path';
 import { load as loadYaml } from 'js-yaml';
@@ -587,6 +587,32 @@ describe('Ki-Buddy product release identity', () => {
     }
   });
 
+  it('keeps the application name generic while identifying project distribution artifacts', () => {
+    const tempDir = mkdtempSync(join(tmpdir(), 'project-artifact-name-'));
+    const outputPath = join(tempDir, 'electron-builder.json');
+    const overlay = createProjectPackagingOverlay();
+    overlay.packageMetadata.name = 'ki-buddy-zxjt';
+    overlay.packageMetadata.productName = 'Ki-Buddy';
+    overlay.desktop.productName = 'Ki-Buddy';
+    overlay.desktop.linux.desktop.entry.Name = 'Ki-Buddy';
+
+    try {
+      const config = createElectronBuilderConfig(projectRoot, outputPath, {
+        packagingOverlay: overlay,
+        version: '3.2.1',
+        distributionBuildPlan: { distributionId: 'zxjt' },
+      });
+
+      expect(config.productName).toBe('Ki-Buddy');
+      expect(config.extraMetadata.productName).toBe('Ki-Buddy');
+      for (const target of [config.win, config.nsis, config.mac, config.linux]) {
+        expect(target.artifactName).toBe('ki-buddy-zxjt-${version}-${os}-${arch}.${ext}');
+      }
+    } finally {
+      rmSync(tempDir, { recursive: true, force: true });
+    }
+  });
+
   it('records the exact product policy sources, tested commit, and source-tree state in packaged build evidence', () => {
     const tempDir = mkdtempSync(join(tmpdir(), 'ki-buddy-build-evidence-'));
     const outputPath = join(tempDir, 'ki-buddy-build-evidence.json');
@@ -669,6 +695,51 @@ describe('Ki-Buddy product release identity', () => {
     }
   });
 
+  it('records the immutable project distribution inputs without credential values', () => {
+    const tempDir = mkdtempSync(join(tmpdir(), 'project-build-evidence-'));
+    const sourceCommit = 'a'.repeat(40);
+    const buildPlan = {
+      schemaVersion: 1,
+      distributionId: 'zxjt',
+      mode: 'preview',
+      version: '0.1.0',
+      identityMode: 'local',
+      source: { repository: 'xlihub/KiBuddy', commit: sourceCommit, treeState: 'committed' },
+      registration: { revision: 'b'.repeat(40) },
+      manifest: { digest: 'c'.repeat(64) },
+      baseline: { repository: 'xlihub/KiBuddy', commit: 'd'.repeat(40) },
+      platforms: ['macos-arm64'],
+      integrations: [],
+      disabledFeatures: ['account', 'agents', 'about', 'feedback', 'githubResources'],
+      runtimeIdentity: {
+        dataDirectory: 'Ki-Buddy-ZXJT-Preview',
+        credentialNamespace: 'ki-buddy-zxjt-preview',
+      },
+      kiCore: {
+        repository: 'xlihub/Ki-Core',
+        tag: 'ki-core-v0.1.4',
+        commit: 'e'.repeat(40),
+        aionCore: { repository: 'iOfficeAI/AionCore', tag: 'v0.1.72', peeledCommit: 'f'.repeat(40) },
+        platform: 'macos-arm64',
+        checksum: '1'.repeat(64),
+      },
+      secretScope: { kind: 'none', names: [] },
+    };
+    try {
+      const evidence = createKiBuddyBuildEvidence(projectRoot, join(tempDir, 'evidence.json'), {
+        commit: sourceCommit,
+        dirty: false,
+        sourceStateSha256: '2'.repeat(64),
+        distributionBuildPlan: buildPlan,
+      });
+
+      expect(evidence.distribution).toEqual(buildPlan);
+      expect(JSON.stringify(evidence.distribution)).not.toMatch(/password|privateKey|token|secretValue/iu);
+    } finally {
+      rmSync(tempDir, { recursive: true, force: true });
+    }
+  });
+
   it('changes source-state evidence for package.json, other tracked files, and untracked files', () => {
     const tempDir = mkdtempSync(join(tmpdir(), 'ki-buddy-source-state-'));
     const packagePath = join(tempDir, 'package.json');
@@ -708,6 +779,19 @@ describe('Ki-Buddy product release identity', () => {
       expect(createSourceStateSha256(tempDir)).not.toBe(baseline);
     } finally {
       rmSync(tempDir, { recursive: true, force: true });
+    }
+  });
+
+  it('excludes temporary build-output backups from source-state evidence', () => {
+    const backupOutDir = join(projectRoot, `.tmp-out-backup-${process.pid}-${randomUUID()}`);
+    const baseline = createSourceStateSha256(projectRoot);
+    try {
+      mkdirSync(backupOutDir, { recursive: true });
+      writeFileSync(join(backupOutDir, '.build-hash'), 'temporary build cache\n');
+
+      expect(createSourceStateSha256(projectRoot)).toBe(baseline);
+    } finally {
+      rmSync(backupOutDir, { recursive: true, force: true });
     }
   });
 

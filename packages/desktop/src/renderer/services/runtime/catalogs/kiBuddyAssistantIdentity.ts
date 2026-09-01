@@ -1,5 +1,5 @@
 import type { TChatConversation, TConversationAssistantIdentity } from '@/common/config/storage';
-import type { ProductExperience, ProductResourceOrigin } from '@/common/platform/ki-buddy';
+import type { KiBuddyProductIntegration, ProductExperience, ProductResourceOrigin } from '@/common/platform/ki-buddy';
 import type { Assistant } from '@/common/types/agent/assistantTypes';
 import {
   KI_BUDDY_ASSISTANT_IDENTITIES,
@@ -75,13 +75,36 @@ function hasExtensionRuntimeIdentity(conversation: TChatConversation): boolean {
   return conversation.assistant?.source === 'extension' || identities.some((identity) => identity?.startsWith('ext:'));
 }
 
+function hasAgentsExecutionAssistantIdentity(
+  conversation: TChatConversation,
+  matchedAssistant: Assistant | undefined
+): boolean {
+  const identity = KI_BUDDY_ASSISTANT_IDENTITIES.agentsExecution;
+  if (matchedAssistant?.id === identity.id && matchedAssistant.source === identity.source) return true;
+  const ids = [
+    conversation.assistant?.id,
+    readConversationString(conversation.extra, 'assistant_id'),
+    readConversationString(conversation.extra, 'preset_assistant_id'),
+    readConversationString(conversation.extra, 'custom_agent_id'),
+  ];
+  return ids.includes(identity.id);
+}
+
 /** Resolves whether a persisted conversation may mount its runtime under the Ki-Buddy product policy. */
 export function resolveKiBuddyConversationRuntimeAccess(
   input: KiBuddyConversationRuntimeAccessInput,
-  experience: ProductExperience
+  experience: ProductExperience,
+  integrations: readonly KiBuddyProductIntegration[] = ['agentsGateway']
 ): ConversationRuntimeAccess {
   const { conversation, assistantCatalog } = input;
-  if (!conversation || experience.featureState('extensionRuntime') === 'enabled') return 'allowed';
+  if (!conversation) return 'allowed';
+  if (
+    !integrations.includes('agentsGateway') &&
+    hasAgentsExecutionAssistantIdentity(conversation, assistantCatalog.matchedAssistant)
+  ) {
+    return 'blocked';
+  }
+  if (experience.featureState('extensionRuntime') === 'enabled') return 'allowed';
   if (hasExtensionRuntimeIdentity(conversation)) return 'blocked';
 
   if (

@@ -35,7 +35,8 @@ export type InstallationIntegrityDiagnostics = {
 };
 
 export function openDownloadLatest(): void {
-  window.open(getProductDownloadUrl(), '_blank', 'noopener,noreferrer');
+  const downloadUrl = getProductDownloadUrl();
+  if (downloadUrl) window.open(downloadUrl, '_blank', 'noopener,noreferrer');
 }
 
 /**
@@ -187,8 +188,9 @@ export function getInstallationIntegrityModalActions(
 } {
   const diagnosticsKind = options.diagnosticsKind ?? 'incomplete_installation';
   const config = DIALOG_KIND_CONFIG[diagnosticsKind];
+  const canDownloadLatest = config.showDownloadLatest && getProductDownloadUrl() !== null;
   return {
-    downloadText: config.showDownloadLatest ? getInstallationIntegrityDownloadText(t) : undefined,
+    downloadText: canDownloadLatest ? getInstallationIntegrityDownloadText(t) : undefined,
     onDownloadLatest: options.onDownloadLatest ?? openDownloadLatest,
     onRecoverCorruptedDatabase: options.onRecoverCorruptedDatabase ?? (() => Promise.resolve()),
     onReportDiagnostics: options.onReportDiagnostics ?? (() => Promise.resolve()),
@@ -198,14 +200,16 @@ export function getInstallationIntegrityModalActions(
 }
 
 export function getDownloadLatestModalActionProps(t: TFunction): {
-  cancelButtonProps: {
+  cancelButtonProps?: {
     style: {
       display: 'none';
     };
   };
-  okText: string;
-  onOk: () => void;
+  footer?: null;
+  okText?: string;
+  onOk?: () => void;
 } {
+  if (getProductDownloadUrl() === null) return { footer: null };
   return {
     okText: getInstallationIntegrityDownloadText(t),
     onOk: openDownloadLatest,

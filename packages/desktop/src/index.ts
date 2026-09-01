@@ -252,7 +252,10 @@ if (kiBuddyRuntime) {
 }
 if (productExperience) configureTrayProductExperience(productExperience);
 const kiBuddyCoreAuthOptions = kiBuddyRuntime?.coreAuthOptions ?? null;
-const ensureDefaultCoreUser = shouldEnsureDefaultCoreUser(kiBuddyRuntimeSelection.status !== 'absent');
+const ensureDefaultCoreUser = shouldEnsureDefaultCoreUser(
+  kiBuddyRuntimeSelection.status !== 'absent',
+  kiBuddyRuntime?.identityMode
+);
 const resolveBackendDataPath = (dataPath: string): string =>
   kiBuddyRuntimeSelection.status !== 'absent' ? resolveKiBuddyCoreDataPath(dataPath) : dataPath;
 
@@ -292,7 +295,12 @@ const backendMigrationSchedulerOptions = {
   onError: (error: unknown) => console.error('[AionUi] Backend migration hook threw:', error),
   run: async () => {
     if (!productExperience) return;
-    await runProductBackendMigrations(ProcessConfig, productExperience, kiBuddyRuntime?.productIdentity ?? null);
+    await runProductBackendMigrations(
+      ProcessConfig,
+      productExperience,
+      kiBuddyRuntime?.productIdentity ?? null,
+      kiBuddyRuntime?.integrations
+    );
     console.info('[AionUi] runBackendMigrations completed');
   },
 } as const;
@@ -303,8 +311,9 @@ const scheduleBackendMigrations: (coreUserId?: string) => void = kiBuddyRuntime
       return () => scheduler.trigger();
     })();
 const kiBuddyAuthService =
-  kiBuddyRuntime?.registerAuthBridge(() => `http://127.0.0.1:${backendManager.port}`, scheduleBackendMigrations) ??
-  null;
+  kiBuddyRuntime?.registerAuthBridge && isMainProductLifecycleEnabled(productExperience, 'accountCoreTransport')
+    ? kiBuddyRuntime.registerAuthBridge(() => `http://127.0.0.1:${backendManager.port}`, scheduleBackendMigrations)
+    : null;
 
 ipcMain.on(KI_BUDDY_PRODUCT_BOOTSTRAP_CHANNEL, (event) => {
   event.returnValue = kiBuddyProductBootstrap;
@@ -319,7 +328,7 @@ if (productBusinessLifecycleEnabled) {
     event.returnValue = rendererInitialLanguage;
   });
 
-  if (kiBuddyRuntime) {
+  if (kiBuddyRuntime?.coreAuthOptions) {
     ipcMain.on(kiBuddyRuntime.coreTransportChannel, (event) => {
       event.returnValue = kiBuddyRuntime.coreAuthOptions.coreCsrfToken;
     });
@@ -614,7 +623,7 @@ const createWindow = ({ showOnReady = true }: { showOnReady?: boolean } = {}): v
   initMainAdapterWithWindow(mainWindow);
   bindMainWindowReferences(mainWindow);
 
-  if (!kiBuddyProductInvalid) setupApplicationMenu();
+  if (!kiBuddyProductInvalid) setupApplicationMenu(productExperience ?? undefined);
 
   setupZoomForWindow(mainWindow);
   registerWindowMaximizeListeners(mainWindow);
@@ -625,6 +634,7 @@ const createWindow = ({ showOnReady = true }: { showOnReady?: boolean } = {}): v
   const isCiRuntime = process.env.CI === 'true' || process.env.CI === '1' || process.env.GITHUB_ACTIONS === 'true';
   const disableAutoUpdater =
     kiBuddyProductInvalid ||
+    kiBuddyRuntime?.updateFeed === null ||
     process.env.AIONUI_DISABLE_AUTO_UPDATE === '1' ||
     process.env.AIONUI_E2E_TEST === '1' ||
     isCiRuntime;
@@ -633,7 +643,7 @@ const createWindow = ({ showOnReady = true }: { showOnReady?: boolean } = {}): v
       .then(([{ autoUpdaterService }, { createAutoUpdateStatusBroadcast }]) => {
         // Create status broadcast callback that emits via ipcBridge (pure emitter, no window binding)
         const statusBroadcast = createAutoUpdateStatusBroadcast();
-        autoUpdaterService.initialize(statusBroadcast, kiBuddyRuntime?.updateFeed);
+        autoUpdaterService.initialize(statusBroadcast, kiBuddyRuntime?.updateFeed ?? undefined);
         autoUpdaterService.setBeforeQuitAndInstall(async () => {
           await backendManager.stop();
         });
@@ -849,9 +859,15 @@ const handleAppReady = async (): Promise<void> => {
 
   if (kiBuddyAuthService && productExperience) {
     try {
-      const started = await startAgentsMcpProductLifecycle(productExperience, kiBuddyAuthService, (listener) => {
-        app.once('will-quit', () => void listener());
-      });
+      const started = await startAgentsMcpProductLifecycle(
+        productExperience,
+        kiBuddyAuthService,
+        (listener) => {
+          app.once('will-quit', () => void listener());
+        },
+        undefined,
+        kiBuddyRuntime?.integrations
+      );
       if (started) mark('agentsMcpBridge');
     } catch (error) {
       console.error('[Ki-Buddy] Failed to start the Agents MCP bridge.', error);

@@ -44,6 +44,14 @@ export type ProductExperience = Readonly<{
   resourceAccess: (kind: ProductResourceKind, origin: ProductResourceOrigin) => ProductResourceAccess;
 }>;
 
+/** Preserves upstream behavior when no product policy exists. */
+export function isProductFeatureEnabled(
+  experience: ProductExperience | null | undefined,
+  featureId: ProductFeatureId
+): boolean {
+  return !experience || experience.featureState(featureId) === 'enabled';
+}
+
 export type ProductResourceDescriptor = Readonly<{
   id: string;
   name?: string;

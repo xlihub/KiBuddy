@@ -1,4 +1,4 @@
-import rawProductConfig from '../../../../../../ki-buddy-product.json';
+import defaultProductConfig from '../../../../../../ki-buddy-product.json';
 import { SUPPORTED_LANGUAGES, type SupportedLanguage } from '@/common/config/i18n';
 import { normalizeAgentsBaseUrl } from './deploymentUrl';
 import {
@@ -9,6 +9,11 @@ import {
 } from './experience';
 
 export const KI_BUDDY_PRODUCT_RUNTIME = 'ki-buddy' as const;
+
+declare const __KI_BUDDY_EFFECTIVE_PRODUCT_CONFIG__: unknown;
+
+export type KiBuddyDistributionIdentityMode = 'agents' | 'local';
+export type KiBuddyProductIntegration = 'agentsGateway';
 
 export type KiBuddyProductConfig = DeepReadonly<{
   assets: {
@@ -42,6 +47,16 @@ export type KiBuddyProductConfig = DeepReadonly<{
     agentsBaseUrl: string;
     language: SupportedLanguage;
   };
+  distribution: {
+    credentialNamespace: string;
+    dataDirectory: string;
+    distributionId: string;
+    identityMode: KiBuddyDistributionIdentityMode;
+    integrations: readonly KiBuddyProductIntegration[];
+    mode: 'formal' | 'preview';
+    nonSensitiveConfig: Record<string, unknown>;
+    schemaVersion: 1;
+  } | null;
   electronBuilder: {
     appId: string;
     protocolScheme: string;
@@ -95,6 +110,7 @@ const PRODUCT_CONFIG_TOP_LEVEL_KEYS = [
   'updates',
   'kiCore',
   'experience',
+  'distribution',
 ] as const;
 
 function requireRecord(value: unknown, label: string): Record<string, unknown> {
@@ -180,6 +196,71 @@ function requireRepository(value: unknown, label: string): string {
     throw new Error(`${label} must use owner/repo format`);
   }
   return repository;
+}
+
+function requireIdentitySegment(value: unknown, label: string): string {
+  const segment = requireString(value, label);
+  if (!/^[A-Za-z0-9][A-Za-z0-9._-]*$/.test(segment)) {
+    throw new Error(`${label} must be a safe directory or namespace segment`);
+  }
+  return segment;
+}
+
+function parseDistribution(value: unknown): KiBuddyProductConfig['distribution'] {
+  if (value === undefined) return null;
+  const distribution = requireRecord(value, 'Ki-Buddy distribution');
+  requireExactKeys(
+    distribution,
+    [
+      'schemaVersion',
+      'distributionId',
+      'identityMode',
+      'integrations',
+      'mode',
+      'dataDirectory',
+      'credentialNamespace',
+      'nonSensitiveConfig',
+    ],
+    'Ki-Buddy distribution'
+  );
+  if (distribution.schemaVersion !== 1) throw new Error('Unsupported Ki-Buddy distribution schema');
+  const distributionId = requireString(distribution.distributionId, 'Ki-Buddy distribution id');
+  if (!/^[a-z0-9]+(?:-[a-z0-9]+)*$/.test(distributionId)) {
+    throw new Error('Ki-Buddy distribution id must be a lowercase slug');
+  }
+  const identityMode = requireString(distribution.identityMode, 'Ki-Buddy distribution identity mode');
+  if (!['agents', 'local'].includes(identityMode)) {
+    throw new Error('Ki-Buddy distribution identity mode must be agents or local');
+  }
+  const mode = requireString(distribution.mode, 'Ki-Buddy distribution mode');
+  if (!['formal', 'preview'].includes(mode)) {
+    throw new Error('Ki-Buddy distribution mode must be formal or preview');
+  }
+  if (!Array.isArray(distribution.integrations)) {
+    throw new Error('Ki-Buddy distribution integrations must be an array');
+  }
+  const integrations = distribution.integrations.map((integration) => {
+    if (integration !== 'agentsGateway') {
+      throw new Error('Ki-Buddy distribution integration must be agentsGateway');
+    }
+    return integration;
+  });
+  if (new Set(integrations).size !== integrations.length) {
+    throw new Error('Ki-Buddy distribution integrations must be unique');
+  }
+  return deepFreeze({
+    schemaVersion: 1,
+    distributionId,
+    identityMode: identityMode as KiBuddyDistributionIdentityMode,
+    integrations,
+    mode: mode as 'formal' | 'preview',
+    dataDirectory: requireIdentitySegment(distribution.dataDirectory, 'Ki-Buddy distribution data directory'),
+    credentialNamespace: requireIdentitySegment(
+      distribution.credentialNamespace,
+      'Ki-Buddy distribution credential namespace'
+    ),
+    nonSensitiveConfig: requireRecord(distribution.nonSensitiveConfig, 'Ki-Buddy distribution configuration'),
+  });
 }
 
 /** Validates the runtime-owned subset of Ki-Buddy product configuration. */
@@ -273,6 +354,11 @@ export function parseKiBuddyProductConfig(value: unknown): KiBuddyProductConfig 
   const updateTagPrefix = requireString(updates.tagPrefix, 'Ki-Buddy update tag prefix');
   const updateReleasePageUrl = requireHttpUrl(updates.releasePageUrl, 'Ki-Buddy update release page');
   const protocolScheme = requireProtocolScheme(electronBuilder.protocols);
+  const distribution = parseDistribution(config.distribution);
+  const experience = parseProductExperiencePolicy(config.experience);
+  if (distribution?.identityMode === 'local' && experience.features.account !== 'disabled') {
+    throw new Error('Local Ki-Buddy distributions must disable account');
+  }
   const brandRepositoryUrl = requireHttpUrl(links.repository, 'Ki-Buddy brand link repository');
   const brandRepositoryPath = repositoryPathFromUrl(brandRepositoryUrl);
   if (brandRepositoryPath !== sourceRepository) {
@@ -328,6 +414,7 @@ export function parseKiBuddyProductConfig(value: unknown): KiBuddyProductConfig 
       agentsBaseUrl,
       language: defaults.language as SupportedLanguage,
     },
+    distribution,
     electronBuilder: {
       appId: requireString(electronBuilder.appId, 'Ki-Buddy electron-builder app id'),
       protocolScheme,
@@ -339,7 +426,7 @@ export function parseKiBuddyProductConfig(value: unknown): KiBuddyProductConfig 
       light: requireSupportedString(themes.light, 'ki-buddy-light', 'Ki-Buddy light theme'),
       dark: requireSupportedString(themes.dark, 'ki-buddy-dark', 'Ki-Buddy dark theme'),
     },
-    experience: parseProductExperiencePolicy(config.experience),
+    experience,
     updates: {
       provider: updateProvider,
       repository: updateRepository,
@@ -361,4 +448,9 @@ export function loadKiBuddyProductConfig(value: unknown): KiBuddyProductConfigLo
   }
 }
 
-export const KI_BUDDY_PRODUCT_CONFIG_RESULT = loadKiBuddyProductConfig(rawProductConfig);
+const effectiveProductConfig =
+  typeof __KI_BUDDY_EFFECTIVE_PRODUCT_CONFIG__ === 'undefined'
+    ? defaultProductConfig
+    : __KI_BUDDY_EFFECTIVE_PRODUCT_CONFIG__;
+
+export const KI_BUDDY_PRODUCT_CONFIG_RESULT = loadKiBuddyProductConfig(effectiveProductConfig);

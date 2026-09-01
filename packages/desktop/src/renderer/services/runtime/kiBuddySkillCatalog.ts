@@ -1,14 +1,19 @@
 import { ipcBridge } from '@/common';
 import {
   projectProductResources,
+  type KiBuddyProductIntegration,
   type ProductExperience,
   type ProductResourceAccess,
   type ProductResourceHiddenRecord,
   type ProductResourceOrigin,
 } from '@/common/platform/ki-buddy';
 import { reportHiddenProductResources } from './catalogs/kiBuddyProductResourceDiagnostics';
-import { getProductExperience } from './kiBuddyRuntime';
-import { KI_BUDDY_PRODUCT_SKILL_NAMES } from './catalogs/kiBuddyResourceRegistry';
+import { getKiBuddyProductRuntime, getProductExperience } from './kiBuddyRuntime';
+import {
+  areKiBuddyProductResourceIntegrationsEnabled,
+  KI_BUDDY_PRODUCT_RESOURCE_REGISTRY,
+  KI_BUDDY_PRODUCT_SKILL_NAMES,
+} from './catalogs/kiBuddyResourceRegistry';
 
 export type AvailableSkill = Awaited<ReturnType<typeof ipcBridge.fs.listAvailableSkills.invoke>>[number];
 
@@ -44,14 +49,36 @@ const resolveSkillIdentity = (
 /** Applies product resource access to stable Skill identities supplied by AionCore. */
 export const projectProductSkillCatalog = (
   skills: readonly AvailableSkill[],
-  experience: ProductExperience
+  experience: ProductExperience,
+  integrations: readonly KiBuddyProductIntegration[] = ['agentsGateway']
 ): ProductSkillCatalog => {
   const resources = skills.map(resolveSkillIdentity);
-  const projection = projectProductResources(experience, 'skill', resources);
+  const unavailableProductResources = resources.flatMap((resource) => {
+    const definition = Object.values(KI_BUDDY_PRODUCT_RESOURCE_REGISTRY.skill).find(
+      ({ backendName }) => backendName === resource.skill.name
+    );
+    return resource.origin === 'productBuiltin' &&
+      definition &&
+      !areKiBuddyProductResourceIntegrationsEnabled(definition, integrations)
+      ? [
+          {
+            code: 'product_resource_hidden' as const,
+            kind: 'skill' as const,
+            resourceId: resource.id,
+            resourceName: resource.name,
+            origin: resource.origin,
+            access: 'hidden' as const,
+          },
+        ]
+      : [];
+  });
+  const unavailableResourceIds = new Set(unavailableProductResources.map(({ resourceId }) => resourceId));
+  const availableResources = resources.filter(({ id }) => !unavailableResourceIds.has(id));
+  const projection = projectProductResources(experience, 'skill', availableResources);
   const projectedVisible = new Map(projection.visible.map(({ resource, access }) => [resource.id, access]));
   const autoInjectExclusions = new Set(experience.behaviorDefaults().autoInjectedSkillExclusions);
   const visibleAutoInjectIds = new Set(
-    resources
+    availableResources
       .filter(
         ({ skill }) =>
           experience.resourceAccess('skill', 'upstreamBuiltin') === 'hidden' &&
@@ -89,7 +116,10 @@ export const projectProductSkillCatalog = (
   });
   return {
     entries,
-    hiddenResources: projection.hidden.filter(({ resourceId }) => !visibleAutoInjectIds.has(resourceId)),
+    hiddenResources: [
+      ...unavailableProductResources,
+      ...projection.hidden.filter(({ resourceId }) => !visibleAutoInjectIds.has(resourceId)),
+    ],
     visibleSkills: entries.map(({ skill }) => skill),
   };
 };
@@ -113,10 +143,11 @@ export const filterProductVisibleSkillNames = (
 
 /** Loads the AionCore Skill catalog and applies the active product policy once for renderer consumers. */
 export const loadProductSkillCatalog = async (
-  experience: ProductExperience = getProductExperience()
+  experience: ProductExperience = getProductExperience(),
+  integrations: readonly KiBuddyProductIntegration[] = getKiBuddyProductRuntime()?.integrations ?? ['agentsGateway']
 ): Promise<ProductSkillCatalog> => {
   const skills = await ipcBridge.fs.listAvailableSkills.invoke();
-  const catalog = projectProductSkillCatalog(skills, experience);
+  const catalog = projectProductSkillCatalog(skills, experience, integrations);
   reportHiddenProductResources('skill', catalog.hiddenResources);
   return catalog;
 };

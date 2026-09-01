@@ -12,8 +12,10 @@ import {
   createKiBuddyProductCapability,
   createKiBuddyProductExperience,
   deepFreeze,
+  isProductFeatureEnabled,
   resolveLanguagePreference,
   type KiBuddyProductConfigLoadResult,
+  type KiBuddyProductIntegration,
   type ProductExperience,
   type ProductFeatureId,
 } from '@/common/platform/ki-buddy';
@@ -35,20 +37,21 @@ export type KiBuddyRuntime = {
     iconPath: string;
     productName: string;
   };
-  coreAuthOptions: KiBuddyCoreAuthOptions;
+  coreAuthOptions: KiBuddyCoreAuthOptions | null;
   coreTransportChannel: typeof KI_BUDDY_CORE_TRANSPORT_CHANNEL;
   createBackendMigrationScheduler: typeof createKiBuddyBackendMigrationScheduler;
+  identityMode: 'agents' | 'local';
+  integrations: readonly KiBuddyProductIntegration[];
   productIdentity: typeof KI_BUDDY_PRODUCT_RUNTIME;
   productCapability: KiBuddyProductCapability;
   productExperience: ProductExperience;
-  registerAuthBridge: (
-    getCoreBaseUrl: () => string,
-    onSessionAuthenticated?: (coreUserId: string) => void
-  ) => AgentsAuthService;
+  registerAuthBridge:
+    | ((getCoreBaseUrl: () => string, onSessionAuthenticated?: (coreUserId: string) => void) => AgentsAuthService)
+    | null;
   resolveDataPath: (dataPath: string) => string;
   resolveLanguage: (savedLanguage: string | null | undefined, systemLanguage: string | null) => SupportedLanguage;
-  updateBridge: UpdateBridgeConfiguration;
-  updateFeed: UpdateFeedConfiguration;
+  updateBridge: UpdateBridgeConfiguration | null;
+  updateFeed: UpdateFeedConfiguration | null;
 };
 
 export type KiBuddyRuntimeSelection =
@@ -94,6 +97,14 @@ export function isMainProductLifecycleEnabled(
   return productExperience.featureState(MAIN_PRODUCT_LIFECYCLE_REGISTRY[lifecycleId].featureId) === 'enabled';
 }
 
+/** Evaluates one trusted project integration through the runtime integration policy. */
+export function isKiBuddyProductIntegrationEnabled(
+  integrations: readonly KiBuddyProductIntegration[],
+  integration: KiBuddyProductIntegration
+): boolean {
+  return integrations.includes(integration);
+}
+
 export type KiBuddyProductIntegrityWindowOptions = {
   isPackaged: boolean;
   preloadPath: string;
@@ -107,6 +118,7 @@ export function createKiBuddyProductBootstrap(selection: KiBuddyRuntimeSelection
     return deepFreeze({
       status: 'ready',
       productIdentity: selection.productIdentity,
+      identityMode: selection.runtime.identityMode,
       capability: selection.runtime.productCapability,
       error: null,
     });
@@ -225,11 +237,16 @@ export function resolveMainProductExperience(
 export async function runProductBackendMigrations(
   configFile: Parameters<typeof runBackendMigrations>[0],
   productExperience: ProductExperience,
-  productIdentity: typeof KI_BUDDY_PRODUCT_RUNTIME | null = null
+  productIdentity: typeof KI_BUDDY_PRODUCT_RUNTIME | null = null,
+  integrations: readonly KiBuddyProductIntegration[] = ['agentsGateway']
 ): Promise<void> {
   const { runBackendMigrations } = await import('@process/utils/runBackendMigrations');
   await runBackendMigrations(configFile);
-  if (productIdentity === KI_BUDDY_PRODUCT_RUNTIME && isMainProductLifecycleEnabled(productExperience, 'agentsMcp')) {
+  if (
+    productIdentity === KI_BUDDY_PRODUCT_RUNTIME &&
+    isKiBuddyProductIntegrationEnabled(integrations, 'agentsGateway') &&
+    isMainProductLifecycleEnabled(productExperience, 'agentsMcp')
+  ) {
     const { ensureAgentsMcpRegistration } = await import('./agents/registration');
     await ensureAgentsMcpRegistration();
   }
@@ -247,9 +264,15 @@ export async function startAgentsMcpProductLifecycle(
   startRuntimeBridge: StartAgentsMcpRuntimeBridge = async (service) => {
     const { startAgentsMcpRuntimeBridge } = await import('./agents');
     return startAgentsMcpRuntimeBridge(service);
-  }
+  },
+  integrations: readonly KiBuddyProductIntegration[] = ['agentsGateway']
 ): Promise<boolean> {
-  if (!isMainProductLifecycleEnabled(productExperience, 'agentsMcp')) return false;
+  if (
+    !isKiBuddyProductIntegrationEnabled(integrations, 'agentsGateway') ||
+    !isMainProductLifecycleEnabled(productExperience, 'agentsMcp')
+  ) {
+    return false;
+  }
   const bridge = await startRuntimeBridge(authService);
   onWillQuit(() => bridge.close());
   return true;
@@ -283,13 +306,19 @@ export function createKiBuddyRuntime(
   if (!enabled) return { status: 'absent', productIdentity: null, runtime: null, error: null };
 
   const config = productConfigResult.config;
+  const identityMode = config.distribution?.identityMode ?? 'agents';
+  const integrations = config.distribution?.integrations ?? ['agentsGateway'];
   const productExperience = createKiBuddyProductExperience(config.experience);
-  const coreAuthOptions = createKiBuddyCoreAuthOptions();
-  const coreTransport = new KiBuddyMainCoreTransport(coreAuthOptions.coreCsrfToken);
+  const updatesEnabled = isProductFeatureEnabled(productExperience, 'githubResources');
+  const coreAuthOptions = identityMode === 'agents' ? createKiBuddyCoreAuthOptions() : null;
+  const coreTransport = coreAuthOptions ? new KiBuddyMainCoreTransport(coreAuthOptions.coreCsrfToken) : null;
   startProductFeatureLifecycles(productExperience, [
     {
       featureId: MAIN_PRODUCT_LIFECYCLE_REGISTRY.accountCoreTransport.featureId,
-      start: () => coreTransport.install(),
+      start: () => {
+        if (!coreTransport) throw new Error('Agents account transport requires Agents identity mode');
+        coreTransport.install();
+      },
     },
   ]);
 
@@ -301,16 +330,22 @@ export function createKiBuddyRuntime(
     coreAuthOptions,
     coreTransportChannel: KI_BUDDY_CORE_TRANSPORT_CHANNEL,
     createBackendMigrationScheduler: createKiBuddyBackendMigrationScheduler,
+    identityMode,
+    integrations,
     productIdentity: KI_BUDDY_PRODUCT_RUNTIME,
     productCapability: createKiBuddyProductCapability(config),
     productExperience,
-    registerAuthBridge: (getCoreBaseUrl, onSessionAuthenticated) =>
-      registerKiBuddyAuthBridge({
-        bootstrapSecret: coreAuthOptions.bootstrapSecret,
-        coreTransport,
-        getCoreBaseUrl,
-        onSessionAuthenticated,
-      }),
+    registerAuthBridge:
+      coreAuthOptions && coreTransport
+        ? (getCoreBaseUrl, onSessionAuthenticated) =>
+            registerKiBuddyAuthBridge({
+              bootstrapSecret: coreAuthOptions.bootstrapSecret,
+              coreTransport,
+              credentialStorageNamespace: config.distribution?.credentialNamespace,
+              getCoreBaseUrl,
+              onSessionAuthenticated,
+            })
+        : null,
     resolveDataPath: resolveKiBuddyCoreDataPath,
     resolveLanguage: (savedLanguage, systemLanguage) =>
       resolveLanguagePreference({
@@ -318,8 +353,8 @@ export function createKiBuddyRuntime(
         productLanguage: config.defaults.language,
         systemLanguage,
       }),
-    updateBridge: createKiBuddyUpdateBridgeConfiguration(config),
-    updateFeed: createKiBuddyUpdateFeedConfiguration(config),
+    updateBridge: updatesEnabled ? createKiBuddyUpdateBridgeConfiguration(config) : null,
+    updateFeed: updatesEnabled ? createKiBuddyUpdateFeedConfiguration(config) : null,
   };
   return { status: 'ready', productIdentity: KI_BUDDY_PRODUCT_RUNTIME, runtime, error: null };
 }

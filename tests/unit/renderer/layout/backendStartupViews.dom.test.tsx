@@ -4,9 +4,10 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
-import { describe, expect, it, vi } from 'vitest';
+import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { render, screen } from '@testing-library/react';
 import React from 'react';
+import { KI_BUDDY_PRODUCT_CAPABILITY } from '@/common/platform/ki-buddy';
 
 // Representative English copy for the keys under test so the forbidden-phrase
 // assertions are meaningful; every other key echoes so it stays assertable.
@@ -40,12 +41,18 @@ const FORBIDDEN_PHRASES = ['missing required local resources', 'reinstall', 'ant
 import BackendStartingView from '@/renderer/components/layout/BackendStartingView';
 import {
   getBackendStartupInstallationDescription,
+  getDownloadLatestModalActionProps,
   getInstallationIntegrityDiagnosticsSentText,
   getInstallationIntegrityModalActions,
   getInstallationIntegrityTitle,
 } from '@/renderer/components/layout/InstallationIntegrityDialog';
 
 const echoT = ((key: string) => key) as unknown as Parameters<typeof getInstallationIntegrityTitle>[0];
+
+beforeEach(() => {
+  window.__kiBuddyProductBootstrapError = null;
+  window.__kiBuddyProductPresentation = null;
+});
 
 describe('AC-4: BackendStartingView (pending-slow, process alive)', () => {
   it('shows benign starting copy without any reinstall / antivirus / missing-resource wording', () => {
@@ -86,6 +93,24 @@ describe('AC-5: backend_exited honest-failure wiring', () => {
 
     const actions = getInstallationIntegrityModalActions(echoT, { diagnosticsKind: 'incomplete_installation' });
     expect(actions.downloadText).toBe('common.backendStartup.incompleteInstallation.downloadLatest');
+  });
+
+  it('hides every download action when GitHub resources are disabled', () => {
+    window.__kiBuddyProductPresentation = {
+      ...KI_BUDDY_PRODUCT_CAPABILITY!,
+      experience: {
+        ...KI_BUDDY_PRODUCT_CAPABILITY!.experience,
+        features: {
+          ...KI_BUDDY_PRODUCT_CAPABILITY!.experience.features,
+          githubResources: 'disabled',
+        },
+      },
+    };
+
+    expect(
+      getInstallationIntegrityModalActions(echoT, { diagnosticsKind: 'incomplete_installation' }).downloadText
+    ).toBeUndefined();
+    expect(getDownloadLatestModalActionProps(echoT)).toEqual({ footer: null });
   });
 });
 

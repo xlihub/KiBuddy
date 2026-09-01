@@ -14,7 +14,7 @@ import {
 import * as path from 'path';
 import { ipcBridge } from '@/common';
 import i18n from '@process/services/i18n';
-import type { ProductExperience } from '@/common/platform/ki-buddy';
+import { isProductFeatureEnabled, type ProductExperience } from '@/common/platform/ki-buddy';
 import { isMainProductLifecycleEnabled } from '@process/ki-buddy';
 
 let tray: TrayInstance | null = null;
@@ -24,6 +24,8 @@ let mainWindowRef: BrowserWindow | null = null;
 let cachedActiveCount = 0;
 let trayBrand = { iconPath: 'app.png', productName: 'AionUi' };
 let desktopPetTrayEnabled = true;
+let aboutTrayEnabled = true;
+let githubResourcesTrayEnabled = true;
 
 export type TrayMenuSnapshotItem = Readonly<{
   label?: string;
@@ -53,6 +55,8 @@ export function configureTrayBrand(brand: { iconPath: string; productName: strin
 /** Projects Desktop Pet tray availability from the selected product adapter. */
 export function configureTrayProductExperience(productExperience: ProductExperience): void {
   desktopPetTrayEnabled = isMainProductLifecycleEnabled(productExperience, 'desktopPet');
+  aboutTrayEnabled = isProductFeatureEnabled(productExperience, 'about');
+  githubResourcesTrayEnabled = isProductFeatureEnabled(productExperience, 'githubResources');
 }
 
 export const setTrayMainWindow = (win: BrowserWindow): void => {
@@ -147,6 +151,14 @@ export const buildTrayContextMenu = async (): Promise<Electron.Menu> => {
   const recentConversations = await getRecentConversations();
   const runningTasksCount = getRunningTasksCount();
 
+  return Menu.buildFromTemplate(createTrayContextMenuTemplate(recentConversations, runningTasksCount));
+};
+
+/** Builds the tray menu template after dynamic data has been loaded. */
+export const createTrayContextMenuTemplate = (
+  recentConversations: readonly { id: string; title: string }[],
+  runningTasksCount: number
+): Electron.MenuItemConstructorOptions[] => {
   const template: Electron.MenuItemConstructorOptions[] = [
     {
       label: formatTrayBrandText(i18n.t('common.tray.showWindow'), trayBrand.productName),
@@ -253,22 +265,26 @@ export const buildTrayContextMenu = async (): Promise<Electron.Menu> => {
       ],
     });
   }
-  template.push({ type: 'separator' });
-  template.push({
-    label: i18n.t('common.tray.checkUpdate'),
-    click: () => {
-      showAndFocusMainWindow();
-      mainWindowRef?.webContents.send('tray:check-update');
-    },
-  });
-  template.push({ type: 'separator' });
-  template.push({
-    label: formatTrayBrandText(i18n.t('common.tray.about'), trayBrand.productName),
-    click: () => {
-      showAndFocusMainWindow();
-      mainWindowRef?.webContents.send('tray:open-about');
-    },
-  });
+  if (githubResourcesTrayEnabled) {
+    template.push({ type: 'separator' });
+    template.push({
+      label: i18n.t('common.tray.checkUpdate'),
+      click: () => {
+        showAndFocusMainWindow();
+        mainWindowRef?.webContents.send('tray:check-update');
+      },
+    });
+  }
+  if (aboutTrayEnabled) {
+    template.push({ type: 'separator' });
+    template.push({
+      label: formatTrayBrandText(i18n.t('common.tray.about'), trayBrand.productName),
+      click: () => {
+        showAndFocusMainWindow();
+        mainWindowRef?.webContents.send('tray:open-about');
+      },
+    });
+  }
   template.push({
     label: i18n.t('common.tray.restart'),
     click: () => {
@@ -286,7 +302,7 @@ export const buildTrayContextMenu = async (): Promise<Electron.Menu> => {
     },
   });
 
-  return Menu.buildFromTemplate(template);
+  return template;
 };
 
 if (process.env.AIONUI_E2E_TEST === '1') {

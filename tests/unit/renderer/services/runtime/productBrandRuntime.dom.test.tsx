@@ -7,6 +7,7 @@ import {
   getProductContactUrl,
   getProductDocumentationUrl,
   getProductDownloadUrl,
+  getProductGitHubResourceUrl,
   getRendererAppVersion,
   getProductSkillsMarketDetailsUrl,
   getRendererBrand,
@@ -15,6 +16,7 @@ import {
 } from '@/renderer/services/runtime/productBrandRuntime';
 import { ipcBridge } from '@/common';
 import { configureAssistantPresentationMapper } from '@/common/adapter/ipcBridge';
+import { AgentHubModal } from '@/renderer/pages/settings/AgentSettings/AgentHubModal';
 
 vi.mock('react-i18next', () => ({
   useTranslation: () => ({
@@ -31,6 +33,29 @@ vi.mock('react-i18next', () => ({
     },
   }),
 }));
+
+vi.mock('@/renderer/hooks/agent/useHubAgents', () => ({
+  useHubAgents: () => ({
+    agents: [],
+    error: null,
+    install: vi.fn(),
+    loading: false,
+    retryInstall: vi.fn(),
+    update: vi.fn(),
+  }),
+}));
+
+vi.mock('@renderer/utils/model/agentLogo', () => ({
+  resolveAgentAvatar: vi.fn(),
+  useAgentLogos: () => ({}),
+}));
+
+vi.mock('@/renderer/components/base/AionModal', () => ({
+  default: ({ children, visible }: { children: React.ReactNode; visible: boolean }) =>
+    visible ? <div>{children}</div> : null,
+}));
+
+vi.mock('@/renderer/components/agent/ThemedLogo', () => ({ default: () => null }));
 
 const jsonResponse = (data: unknown) =>
   new Response(JSON.stringify({ data }), {
@@ -73,6 +98,9 @@ describe('renderer product brand adapter', () => {
     expect(getRendererBrand().links.releases).toBe('https://github.com/iOfficeAI/AionUi/releases');
     expect(getProductContactUrl()).toBe('https://x.com/WailiVery');
     expect(getProductDownloadUrl()).toBe('https://www.aionui.com/');
+    expect(getProductGitHubResourceUrl('https://github.com/iOfficeAI/OfficeCLI/releases')).toBe(
+      'https://github.com/iOfficeAI/OfficeCLI/releases'
+    );
     expect(getRendererAppVersion()).toBe('2.1.47');
   });
 
@@ -90,6 +118,47 @@ describe('renderer product brand adapter', () => {
     expect(getProductContactUrl()).toBe('https://github.com/xlihub/KiBuddy/issues');
     expect(getProductDownloadUrl()).toBe('https://github.com/xlihub/Ki-Buddy/releases');
     expect(getRendererAppVersion()).toBe('0.1.1');
+  });
+
+  it('hides renderer GitHub resource destinations when product policy disables them', () => {
+    window.__kiBuddyProductPresentation = {
+      ...KI_BUDDY_PRODUCT_CAPABILITY!,
+      experience: {
+        ...KI_BUDDY_PRODUCT_CAPABILITY!.experience,
+        features: {
+          ...KI_BUDDY_PRODUCT_CAPABILITY!.experience.features,
+          githubResources: 'disabled',
+        },
+      },
+    };
+
+    expect(getProductDownloadUrl()).toBeNull();
+    expect(getProductGitHubResourceUrl('https://github.com/iOfficeAI/OfficeCLI/releases')).toBeNull();
+    expect(getProductDocumentationUrl('https://github.com/iOfficeAI/AionUi/wiki/ACP-Setup')).toBeNull();
+    expect(getProductSkillsMarketDetailsUrl('zh-CN')).toBeNull();
+  });
+
+  it('renders the Agent Hub contribution action while GitHub resources are enabled', () => {
+    render(<AgentHubModal visible onCancel={vi.fn()} />);
+
+    expect(screen.getByText('settings.agentManagement.marketContributionAction')).toBeInTheDocument();
+  });
+
+  it('hides the Agent Hub contribution action while GitHub resources are disabled', () => {
+    window.__kiBuddyProductPresentation = {
+      ...KI_BUDDY_PRODUCT_CAPABILITY!,
+      experience: {
+        ...KI_BUDDY_PRODUCT_CAPABILITY!.experience,
+        features: {
+          ...KI_BUDDY_PRODUCT_CAPABILITY!.experience.features,
+          githubResources: 'disabled',
+        },
+      },
+    };
+
+    render(<AgentHubModal visible onCancel={vi.fn()} />);
+
+    expect(screen.queryByText('settings.agentManagement.marketContributionAction')).toBeNull();
   });
 
   it('initializes product metadata and the configured light theme', () => {

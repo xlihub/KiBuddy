@@ -33,6 +33,7 @@ function renderBootstrap(options?: {
               ? {
                   status: 'ready',
                   productIdentity: 'ki-buddy',
+                  identityMode: 'agents',
                   capability: options.capability,
                   error: null,
                 }

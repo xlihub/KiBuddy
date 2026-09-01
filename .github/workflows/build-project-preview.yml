@@ -1,0 +1,229 @@
+name: Build project preview
+
+on:
+  workflow_dispatch:
+    inputs:
+      distribution_id:
+        description: Registered project distribution id
+        required: true
+        type: string
+      source_sha:
+        description: Full KiBuddy source commit SHA
+        required: true
+        type: string
+
+permissions:
+  contents: read
+
+jobs:
+  validate:
+    runs-on: macos-14
+    timeout-minutes: 10
+    outputs:
+      registration_revision: ${{ steps.resolve.outputs.registration_revision }}
+    env:
+      BUILD_PLAN: ${{ github.workspace }}/validated/project-build-plan.json
+    steps:
+      - name: Checkout trusted product registration
+        uses: actions/checkout@v6
+        with:
+          ref: product/main
+          path: trusted
+          persist-credentials: false
+
+      - name: Checkout requested project source
+        uses: actions/checkout@v6
+        with:
+          ref: ${{ inputs.source_sha }}
+          fetch-depth: 0
+          path: source
+          persist-credentials: false
+
+      - name: Set up Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+
+      - name: Resolve trusted preview build plan
+        id: resolve
+        shell: bash
+        env:
+          DISTRIBUTION_ID: ${{ inputs.distribution_id }}
+          SOURCE_SHA: ${{ inputs.source_sha }}
+          PROJECT_PLATFORM: macos-arm64
+        run: |
+          set -euo pipefail
+          [[ "$DISTRIBUTION_ID" =~ ^[a-z0-9]+(-[a-z0-9]+)*$ ]]
+          [[ "$SOURCE_SHA" =~ ^[0-9a-f]{40}$ ]]
+          test "$(git -C source rev-parse HEAD)" = "$SOURCE_SHA"
+          test "$(node -p "require('./source/distribution-manifest.json').distributionId")" = "$DISTRIBUTION_ID"
+          registration_revision="$(git -C trusted rev-parse HEAD)"
+          node trusted/packages/shared-scripts/src/projectDistribution.js resolve \
+            --registry trusted/distributions/registry.json \
+            --manifest source/distribution-manifest.json \
+            --product-config trusted/ki-buddy-product.json \
+            --platform "$PROJECT_PLATFORM" \
+            --source-sha "$SOURCE_SHA" \
+            --registration-revision "$registration_revision" \
+            --output "$BUILD_PLAN"
+          baseline="$(node -p "require('./validated/project-build-plan.json').baseline.commit")"
+          git -C source merge-base --is-ancestor "$baseline" "$SOURCE_SHA"
+          printf 'registration_revision=%s\n' "$registration_revision" >> "$GITHUB_OUTPUT"
+
+      - name: Upload immutable validation plan
+        uses: actions/upload-artifact@v6
+        with:
+          name: project-plan-${{ github.run_id }}-${{ github.run_attempt }}
+          if-no-files-found: error
+          retention-days: 1
+          path: validated/project-build-plan.json
+
+  build:
+    needs: validate
+    runs-on: macos-14
+    timeout-minutes: 60
+    env:
+      KI_BUDDY_RESOLVED_BUILD_PLAN: ${{ github.workspace }}/validated/project-build-plan.json
+      AIONUI_BACKEND_SOURCE_POLICY: release-pinned
+    steps:
+      - name: Checkout requested project source
+        uses: actions/checkout@v6
+        with:
+          ref: ${{ inputs.source_sha }}
+          fetch-depth: 0
+          path: source
+          persist-credentials: false
+
+      - name: Download immutable validation plan
+        uses: actions/download-artifact@v7
+        with:
+          name: project-plan-${{ github.run_id }}-${{ github.run_attempt }}
+          path: validated
+
+      - name: Set up Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+
+      - name: Set up Bun
+        uses: oven-sh/setup-bun@v2
+        with:
+          bun-version: latest
+
+      - name: Install project dependencies
+        working-directory: source
+        run: bun install --frozen-lockfile
+
+      - name: Build macOS arm64 preview
+        working-directory: source
+        run: node scripts/build-with-builder.js arm64 --mac --arm64
+
+      - name: Upload unverified preview candidate
+        uses: actions/upload-artifact@v6
+        with:
+          name: project-candidate-${{ github.run_id }}-${{ github.run_attempt }}
+          if-no-files-found: error
+          retention-days: 1
+          path: |
+            source/out/*.dmg
+            source/out/project-distribution/project-build-evidence.json
+
+  verify:
+    needs: [validate, build]
+    runs-on: macos-14
+    timeout-minutes: 15
+    env:
+      VALIDATED_PLAN: ${{ github.workspace }}/validated/project-build-plan.json
+      EXPECTED_PLAN: ${{ github.workspace }}/expected/project-build-plan.json
+    steps:
+      - name: Checkout exact trusted registration revision
+        uses: actions/checkout@v6
+        with:
+          ref: ${{ needs.validate.outputs.registration_revision }}
+          path: trusted
+          persist-credentials: false
+
+      - name: Checkout requested project source
+        uses: actions/checkout@v6
+        with:
+          ref: ${{ inputs.source_sha }}
+          fetch-depth: 0
+          path: source
+          persist-credentials: false
+
+      - name: Set up Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+
+      - name: Download immutable validation plan
+        uses: actions/download-artifact@v7
+        with:
+          name: project-plan-${{ github.run_id }}-${{ github.run_attempt }}
+          path: validated
+
+      - name: Download unverified preview candidate
+        uses: actions/download-artifact@v7
+        with:
+          name: project-candidate-${{ github.run_id }}-${{ github.run_attempt }}
+          path: candidate
+
+      - name: Re-resolve expected plan from trusted sources
+        shell: bash
+        env:
+          SOURCE_SHA: ${{ inputs.source_sha }}
+          PROJECT_PLATFORM: macos-arm64
+          REGISTRATION_REVISION: ${{ needs.validate.outputs.registration_revision }}
+        run: |
+          set -euo pipefail
+          node trusted/packages/shared-scripts/src/projectDistribution.js resolve \
+            --registry trusted/distributions/registry.json \
+            --manifest source/distribution-manifest.json \
+            --product-config trusted/ki-buddy-product.json \
+            --platform "$PROJECT_PLATFORM" \
+            --source-sha "$SOURCE_SHA" \
+            --registration-revision "$REGISTRATION_REVISION" \
+            --output "$EXPECTED_PLAN"
+          cmp "$VALIDATED_PLAN" "$EXPECTED_PLAN"
+
+      - name: Verify the exact DMG and packaged evidence
+        shell: bash
+        run: |
+          set -euo pipefail
+          dmg_count="$(find candidate -type f -name '*.dmg' -print | wc -l | tr -d ' ')"
+          test "$dmg_count" = 1
+          dmg_path="$(find candidate -type f -name '*.dmg' -print -quit)"
+          evidence_count="$(find candidate -type f -name 'project-build-evidence.json' -print | wc -l | tr -d ' ')"
+          test "$evidence_count" = 1
+          standalone_evidence="$(find candidate -type f -name 'project-build-evidence.json' -print -quit)"
+          mount_point="$RUNNER_TEMP/project-preview-dmg"
+          mkdir -p "$mount_point" verified
+          hdiutil attach "$dmg_path" -nobrowse -readonly -mountpoint "$mount_point"
+          cleanup() { hdiutil detach "$mount_point" >/dev/null; }
+          trap cleanup EXIT
+          app_count="$(find "$mount_point" -maxdepth 2 -type d -name '*.app' -print | wc -l | tr -d ' ')"
+          test "$app_count" = 1
+          app_path="$(find "$mount_point" -maxdepth 2 -type d -name '*.app' -print -quit)"
+          node trusted/packages/shared-scripts/src/projectDistribution.js verify-unpacked \
+            --project-root source \
+            --path "$app_path" \
+            --platform darwin \
+            --build-plan "$EXPECTED_PLAN"
+          packaged_evidence="$app_path/Contents/Resources/project-distribution/project-build-evidence.json"
+          cmp "$standalone_evidence" "$packaged_evidence"
+          cp "$standalone_evidence" verified/project-build-evidence.json
+          shasum -a 256 "$dmg_path" > verified/project-preview-dmg.sha256
+          hdiutil detach "$mount_point"
+          trap - EXIT
+
+      - name: Upload verified preview package and immutable evidence
+        uses: actions/upload-artifact@v6
+        with:
+          name: ki-buddy-${{ inputs.distribution_id }}-${{ inputs.source_sha }}-macos-arm64-preview
+          if-no-files-found: error
+          retention-days: 7
+          path: |
+            candidate/**/*.dmg
+            expected/project-build-plan.json
+            verified/project-build-evidence.json
+            verified/project-preview-dmg.sha256

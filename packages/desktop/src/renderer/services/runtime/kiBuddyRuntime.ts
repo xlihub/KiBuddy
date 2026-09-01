@@ -12,6 +12,7 @@ import { createKiBuddyAccountSettingsItem } from '@/renderer/pages/ki-buddy/sett
 import kiBuddyLogoUrl from '@/renderer/assets/ki-buddy/app.png?inline';
 import kiBuddyMascotUrl from '@/renderer/assets/ki-buddy/mascot.png';
 import type { KiBuddyProductCapability } from '@/common/types/platform/kiBuddyProduct';
+import type { KiBuddyProductIntegration } from '@/common/platform/ki-buddy';
 
 type TranslateFn = (key: string, options?: { defaultValue?: string }) => string;
 
@@ -42,6 +43,7 @@ export type KiBuddyProductRuntime = {
   };
   defaultLanguage: string | null;
   id: 'ki-buddy';
+  integrations: readonly KiBuddyProductIntegration[];
   localeNamespace: string;
   productExperience: ProductExperience;
   themes: KiBuddyProductCapability['themes'];
@@ -68,6 +70,7 @@ export function getKiBuddyProductRuntime(): KiBuddyProductRuntime | null {
       id: 'ki-buddy',
       brand: { ...product.brand, logoUrl, mascotUrl },
       defaultLanguage: KI_BUDDY_DEFAULT_LANGUAGE ?? null,
+      integrations: product.integrations,
       localeNamespace: product.locale.namespace,
       productExperience,
       themes: product.themes,
@@ -101,6 +104,11 @@ export function getProductExperience(): ProductExperience {
 /** Thin renderer seam for product-controlled feature registration and mounting. */
 export function isProductFeatureEnabled(featureId: ProductFeatureId): boolean {
   return getProductExperience().featureState(featureId) === 'enabled';
+}
+
+/** Enables product resource validation for authenticated Ki-Buddy hosts, including local identity. */
+export function shouldValidateKiBuddyProductResources(authStatus: string): boolean {
+  return Boolean(getKiBuddyProductRuntime()) && authStatus === 'authenticated';
 }
 
 /** Keeps Extension settings data and subscriptions on the same product capability decision. */

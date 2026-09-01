@@ -90,6 +90,25 @@ describe('usePresetAssistantInfo', () => {
     expect(result.current).toEqual({ info: null, isLoading: false, runtimeAccess: 'blocked' });
   });
 
+  it('blocks an existing Agents execution Assistant conversation when Agents Gateway is unavailable', () => {
+    window.__kiBuddyProductPresentation = { ...KI_BUDDY_PRODUCT_CAPABILITY, integrations: [] };
+    useSWRMock.mockReturnValue({ data: [], isLoading: false });
+    const conversation = {
+      ...makeConversation({ assistant_id: 'agents-executor', backend: 'aionrs' }),
+      assistant: {
+        id: 'agents-executor',
+        source: 'builtin',
+        name: 'Agents execution',
+        avatar: '',
+        backend: 'aionrs',
+      },
+    } as TChatConversation;
+
+    const { result } = renderHook(() => usePresetAssistantInfo(conversation));
+
+    expect(result.current).toEqual({ info: null, isLoading: false, runtimeAccess: 'blocked' });
+  });
+
   it('does not restore an assistant backed by a historical Extension record when the runtime is disabled', () => {
     window.__kiBuddyProductPresentation = KI_BUDDY_PRODUCT_CAPABILITY;
     useSWRMock.mockImplementation((key: unknown) => {

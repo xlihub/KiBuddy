@@ -81,4 +81,19 @@ describe('Ki-Buddy settings navigation', () => {
 
     expect(agentIcon).not.toHaveAttribute('style');
   });
+
+  it('removes About from navigation when the project product disables GitHub-facing content', () => {
+    window.__kiBuddyProductPresentation = {
+      ...KI_BUDDY_PRODUCT_CAPABILITY,
+      experience: {
+        ...KI_BUDDY_PRODUCT_CAPABILITY.experience,
+        features: {
+          ...KI_BUDDY_PRODUCT_CAPABILITY.experience.features,
+          about: 'disabled',
+        },
+      },
+    };
+
+    expect(getSettingsNavigationProjection(true, translateKey).items.some(({ id }) => id === 'about')).toBe(false);
+  });
 });

@@ -324,19 +324,21 @@ const DingTalkConfigForm: React.FC<DingTalkConfigFormProps> = ({ pluginStatus, m
       <PreferenceRow
         label={t('settings.dingtalk.clientId', 'Client ID')}
         description={
-          <span>
-            <a
-              className='text-primary hover:underline cursor-pointer text-12px'
-              href={dingTalkDocsUrl}
-              onClick={(e) => {
-                e.preventDefault();
-                openExternalUrl(dingTalkDocsUrl).catch(console.error);
-              }}
-            >
-              {t('settings.dingtalk.devConsoleLink', 'DingTalk Open Platform')}
-            </a>{' '}
-            {t('settings.dingtalk.clientIdDescSuffix', 'to get your Client ID')}
-          </span>
+          dingTalkDocsUrl ? (
+            <span>
+              <a
+                className='text-primary hover:underline cursor-pointer text-12px'
+                href={dingTalkDocsUrl}
+                onClick={(e) => {
+                  e.preventDefault();
+                  openExternalUrl(dingTalkDocsUrl).catch(console.error);
+                }}
+              >
+                {t('settings.dingtalk.devConsoleLink', 'DingTalk Open Platform')}
+              </a>{' '}
+              {t('settings.dingtalk.clientIdDescSuffix', 'to get your Client ID')}
+            </span>
+          ) : undefined
         }
         required
       >
@@ -382,19 +384,21 @@ const DingTalkConfigForm: React.FC<DingTalkConfigFormProps> = ({ pluginStatus, m
       <PreferenceRow
         label={t('settings.dingtalk.clientSecret', 'Client Secret')}
         description={
-          <span>
-            <a
-              className='text-primary hover:underline cursor-pointer text-12px'
-              href={dingTalkDocsUrl}
-              onClick={(e) => {
-                e.preventDefault();
-                openExternalUrl(dingTalkDocsUrl).catch(console.error);
-              }}
-            >
-              {t('settings.dingtalk.devConsoleLink', 'DingTalk Open Platform')}
-            </a>{' '}
-            {t('settings.dingtalk.clientSecretDescSuffix', 'to get Client Secret')}
-          </span>
+          dingTalkDocsUrl ? (
+            <span>
+              <a
+                className='text-primary hover:underline cursor-pointer text-12px'
+                href={dingTalkDocsUrl}
+                onClick={(e) => {
+                  e.preventDefault();
+                  openExternalUrl(dingTalkDocsUrl).catch(console.error);
+                }}
+              >
+                {t('settings.dingtalk.devConsoleLink', 'DingTalk Open Platform')}
+              </a>{' '}
+              {t('settings.dingtalk.clientSecretDescSuffix', 'to get Client Secret')}
+            </span>
+          ) : undefined
         }
         required
       >

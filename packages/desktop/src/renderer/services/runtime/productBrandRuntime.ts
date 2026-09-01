@@ -110,7 +110,9 @@ export function resolveProductConversationRuntimeAccess(
   input: KiBuddyConversationRuntimeAccessInput
 ): ConversationRuntimeAccess {
   const runtime = getKiBuddyProductRuntime();
-  return runtime ? resolveKiBuddyConversationRuntimeAccess(input, runtime.productExperience) : 'allowed';
+  return runtime
+    ? resolveKiBuddyConversationRuntimeAccess(input, runtime.productExperience, runtime.integrations)
+    : 'allowed';
 }
 
 /** Installs product identity once at the shared assistant catalog boundary. */
@@ -120,16 +122,24 @@ export function installProductAssistantCatalogAdapter(): void {
   configureAssistantPresentationMapper({
     detail: adaptProductAssistantDetailIdentity,
     list: (assistants: Assistant[]) => {
-      const catalog = projectProductAssistantCatalog(assistants, runtime.productExperience);
+      const catalog = projectProductAssistantCatalog(assistants, runtime.productExperience, runtime.integrations);
       reportHiddenProductResources('assistant', catalog.hiddenResources);
       return catalog.visibleAssistants.map(adaptProductAssistantIdentity);
     },
   });
 }
 
-/** Keeps the upstream download target unless a product capability supplies its release channel. */
-export function getProductDownloadUrl(): string {
-  return getKiBuddyProductRuntime()?.brand.links.releases ?? AION_UI_DOWNLOAD_URL;
+/** Resolves an upstream GitHub resource through the active product capability. */
+export function getProductGitHubResourceUrl(upstreamUrl: string): string | null {
+  const runtime = getKiBuddyProductRuntime();
+  if (runtime?.productExperience.featureState('githubResources') === 'disabled') return null;
+  return upstreamUrl;
+}
+
+/** Keeps the upstream download target unless product policy hides GitHub resources. */
+export function getProductDownloadUrl(): string | null {
+  const runtime = getKiBuddyProductRuntime();
+  return getProductGitHubResourceUrl(runtime?.brand.links.releases ?? AION_UI_DOWNLOAD_URL);
 }
 
 /** Preserves the upstream author link while products use their configured support channel. */
@@ -137,16 +147,17 @@ export function getProductContactUrl(): string {
   return getKiBuddyProductRuntime()?.brand.links.support ?? AION_UI_CONTACT_URL;
 }
 
-/** Keeps a specific upstream guide for AionUi and routes products to their configured documentation channel. */
-export function getProductDocumentationUrl(upstreamUrl: string): string {
-  return getKiBuddyProductRuntime()?.brand.links.support ?? upstreamUrl;
+/** Keeps a specific upstream guide unless product policy hides GitHub resources. */
+export function getProductDocumentationUrl(upstreamUrl: string): string | null {
+  const runtime = getKiBuddyProductRuntime();
+  return getProductGitHubResourceUrl(runtime?.brand.links.support ?? upstreamUrl);
 }
 
-/** Selects product-owned skill details while retaining the upstream locale-specific pages. */
-export function getProductSkillsMarketDetailsUrl(language: string): string {
-  return (
-    getKiBuddyProductRuntime()?.brand.links.support ??
-    AION_UI_SKILLS_MARKET_DETAILS[language.startsWith('zh') ? 'zh' : 'en']
+/** Selects skill details unless product policy hides GitHub resources. */
+export function getProductSkillsMarketDetailsUrl(language: string): string | null {
+  const runtime = getKiBuddyProductRuntime();
+  return getProductGitHubResourceUrl(
+    runtime?.brand.links.support ?? AION_UI_SKILLS_MARKET_DETAILS[language.startsWith('zh') ? 'zh' : 'en']
   );
 }
 

@@ -7,6 +7,7 @@ import {
   createAionUiProductExperience,
   createKiBuddyProductExperience,
   evaluateProductBuiltinResourceState,
+  isProductFeatureEnabled,
   parseProductExperiencePolicy,
   projectProductResources,
 } from '@/common/platform/ki-buddy/experience';
@@ -17,6 +18,7 @@ const validPolicy = {
   features: {
     account: 'enabled',
     agents: 'enabled',
+    about: 'enabled',
     appearance: 'enabled',
     assistants: 'enabled',
     channels: 'disabled',
@@ -26,10 +28,12 @@ const validPolicy = {
     extensionMarketplace: 'disabled',
     extensionRuntime: 'disabled',
     extensionSettings: 'disabled',
+    feedback: 'enabled',
     guid: 'enabled',
     guidFeedback: 'disabled',
     guidGithubStar: 'disabled',
     guidWebUi: 'disabled',
+    githubResources: 'enabled',
     models: 'enabled',
     scheduledTasks: 'enabled',
     skills: 'enabled',
@@ -204,6 +208,16 @@ describe('ProductExperience interface', () => {
       scheduledTaskExecutor: 'assistant-or-team',
       autoInjectedSkillExclusions: [],
     });
+  });
+
+  it('keeps upstream surfaces enabled without a product policy and follows explicit feature policy', () => {
+    const experience = createKiBuddyProductExperience({
+      ...validPolicy,
+      features: { ...validPolicy.features, about: 'disabled' },
+    });
+
+    expect(isProductFeatureEnabled(undefined, 'about')).toBe(true);
+    expect(isProductFeatureEnabled(experience, 'about')).toBe(false);
   });
 
   it('keeps every MCP origin visible and manageable in the AionUi adapter', () => {

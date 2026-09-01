@@ -616,32 +616,34 @@ const ToolsModalContent: React.FC = () => {
                     ) : (
                       t('settings.goToModelSettings')
                     )}
-                    <Tooltip
-                      content={
-                        <div>
-                          {t('settings.needHelpTooltip')}
-                          <a
-                            href={imageGenerationGuideUrl}
-                            target='_blank'
-                            rel='noopener noreferrer'
-                            className='text-[rgb(var(--primary-6))] hover:text-[rgb(var(--primary-5))] underline ms-4px'
-                            onClick={(e) => e.stopPropagation()}
-                          >
-                            {t('settings.configGuide')}
-                          </a>
-                        </div>
-                      }
-                    >
-                      <a
-                        href={imageGenerationGuideUrl}
-                        target='_blank'
-                        rel='noopener noreferrer'
-                        className='ms-8px text-[rgb(var(--primary-6))] hover:text-[rgb(var(--primary-5))] cursor-pointer'
-                        onClick={(e) => e.stopPropagation()}
+                    {imageGenerationGuideUrl ? (
+                      <Tooltip
+                        content={
+                          <div>
+                            {t('settings.needHelpTooltip')}
+                            <a
+                              href={imageGenerationGuideUrl}
+                              target='_blank'
+                              rel='noopener noreferrer'
+                              className='text-[rgb(var(--primary-6))] hover:text-[rgb(var(--primary-5))] underline ms-4px'
+                              onClick={(e) => e.stopPropagation()}
+                            >
+                              {t('settings.configGuide')}
+                            </a>
+                          </div>
+                        }
                       >
-                        <Help theme='outline' size='14' />
-                      </a>
-                    </Tooltip>
+                        <a
+                          href={imageGenerationGuideUrl}
+                          target='_blank'
+                          rel='noopener noreferrer'
+                          className='ms-8px text-[rgb(var(--primary-6))] hover:text-[rgb(var(--primary-5))] cursor-pointer'
+                          onClick={(e) => e.stopPropagation()}
+                        >
+                          <Help theme='outline' size='14' />
+                        </a>
+                      </Tooltip>
+                    ) : null}
                   </div>
                 )}
               </Form.Item>
