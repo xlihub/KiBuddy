@@ -701,8 +701,11 @@ try {
   const projectBuildPlan = projectBuildPlanPath
     ? JSON.parse(fs.readFileSync(path.resolve(projectBuildPlanPath), 'utf8'))
     : null;
-  if (projectBuildPlan && (projectBuildPlan.schemaVersion !== 1 || projectBuildPlan.mode !== 'preview')) {
-    throw new Error('KI_BUDDY_RESOLVED_BUILD_PLAN must contain a validated preview build plan');
+  if (
+    projectBuildPlan &&
+    (projectBuildPlan.schemaVersion !== 1 || !['preview', 'formal'].includes(projectBuildPlan.mode))
+  ) {
+    throw new Error('KI_BUDDY_RESOLVED_BUILD_PLAN must contain a validated project build plan');
   }
   const buildVersionOverride = projectBuildPlan?.version ?? getBuildVersionOverride();
 
@@ -776,24 +779,32 @@ try {
   const builderConfigPath = path.join(projectRoot, 'out', 'ki-buddy-electron-builder.json');
   const productConfig = readProductConfig(projectRoot);
   if (projectBuildPlan) {
-    const productPin = readKiCorePin(projectRoot);
     const plannedKiCore = projectBuildPlan.kiCore;
-    const plannedPin = {
-      repository: plannedKiCore.repository,
-      tag: plannedKiCore.tag,
-      commit: plannedKiCore.commit,
-      aionCore: plannedKiCore.aionCore,
-      checksum: plannedKiCore.checksum,
-    };
-    const selectedProductPin = {
-      repository: productPin.repository,
-      tag: productPin.tag,
-      commit: productPin.commit,
-      aionCore: productPin.aionCore,
-      checksum: productPin.checksums[plannedKiCore.platform],
-    };
-    if (JSON.stringify(plannedPin) !== JSON.stringify(selectedProductPin)) {
-      throw new Error('Resolved project build plan Ki-Core provenance does not match the product pin');
+    if (plannedKiCore.sourcePolicy === 'release-pinned') {
+      const productPin = readKiCorePin(projectRoot);
+      const plannedPin = {
+        repository: plannedKiCore.repository,
+        tag: plannedKiCore.tag,
+        commit: plannedKiCore.commit,
+        aionCore: plannedKiCore.aionCore,
+        checksum: plannedKiCore.checksum,
+      };
+      const selectedProductPin = {
+        repository: productPin.repository,
+        tag: productPin.tag,
+        commit: productPin.commit,
+        aionCore: productPin.aionCore,
+        checksum: productPin.checksums[plannedKiCore.platform],
+      };
+      if (JSON.stringify(plannedPin) !== JSON.stringify(selectedProductPin)) {
+        throw new Error('Resolved project build plan Ki-Core provenance does not match the product pin');
+      }
+    } else if (
+      plannedKiCore.sourcePolicy !== 'candidate' ||
+      process.env.AIONUI_BACKEND_RUN_ID !== String(plannedKiCore.candidate?.runId) ||
+      process.env.AIONUI_BACKEND_EXPECTED_SHA !== plannedKiCore.commit
+    ) {
+      throw new Error('Resolved project build plan Ki-Core candidate does not match the requested artifact');
     }
   }
   const productExecutableName =
@@ -813,8 +824,8 @@ try {
     projectRoot,
     platform: process.platform,
     arch: targetArch,
-    version: resolveAioncoreVersion(projectRoot, projectBuildPlan ? 'release-pinned' : undefined),
-    sourcePolicy: projectBuildPlan ? 'release-pinned' : undefined,
+    version: resolveAioncoreVersion(projectRoot, projectBuildPlan?.kiCore.sourcePolicy),
+    sourcePolicy: projectBuildPlan?.kiCore.sourcePolicy,
   });
 
   // 6. Prepare hub resources (index.json + extension zips for offline fallback)

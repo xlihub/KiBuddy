@@ -1,0 +1,59 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://github.com/xlihub/KiBuddy/distributions/schemas/delivery-record.schema.json",
+  "title": "Ki-Buddy project delivery records",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["schemaVersion", "deliveries"],
+  "properties": {
+    "schemaVersion": { "const": 1 },
+    "deliveries": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "distributionId",
+          "version",
+          "sourceCommit",
+          "registrationRevision",
+          "manifestDigest",
+          "platforms",
+          "candidate",
+          "installerChecksums",
+          "custodyReference"
+        ],
+        "properties": {
+          "distributionId": { "type": "string", "pattern": "^[a-z0-9]+(?:-[a-z0-9]+)*$" },
+          "version": { "type": "string", "pattern": "^(0|[1-9]\\d*)\\.(0|[1-9]\\d*)\\.(0|[1-9]\\d*)$" },
+          "sourceCommit": { "type": "string", "pattern": "^[0-9a-f]{40}$" },
+          "registrationRevision": { "type": "string", "pattern": "^[0-9a-f]{40}$" },
+          "manifestDigest": { "type": "string", "pattern": "^[0-9a-f]{64}$" },
+          "platforms": {
+            "type": "array",
+            "minItems": 1,
+            "uniqueItems": true,
+            "items": { "enum": ["macos-arm64"] }
+          },
+          "candidate": {
+            "type": "object",
+            "additionalProperties": false,
+            "required": ["runId", "runAttempt"],
+            "properties": {
+              "runId": { "type": "integer", "minimum": 1 },
+              "runAttempt": { "type": "integer", "minimum": 1 }
+            }
+          },
+          "installerChecksums": {
+            "type": "object",
+            "additionalProperties": {
+              "type": "string",
+              "pattern": "^[0-9a-f]{64}$"
+            }
+          },
+          "custodyReference": { "type": "string", "minLength": 1 }
+        }
+      }
+    }
+  }
+}

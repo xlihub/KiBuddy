@@ -24,6 +24,7 @@ const {
   inspectArchiveSafely,
   readKiCorePin,
   selectCandidateArtifact,
+  sha256File,
   validateCandidateRun,
   validateDownloadedAssets,
 } = require('./kiCoreRelease');
@@ -166,6 +167,48 @@ function githubApiGetJson(apiPath, token) {
   return JSON.parse(out);
 }
 
+function githubApiGetContent(pathname, ref, token) {
+  const response = githubApiGetJson(
+    `repos/${KI_CORE_REPOSITORY}/contents/${pathname}?ref=${encodeURIComponent(ref)}`,
+    token
+  );
+  if (response?.encoding !== 'base64' || typeof response.content !== 'string') {
+    throw new Error(`Ki-Core candidate source metadata is missing: ${pathname}`);
+  }
+  return Buffer.from(response.content.replaceAll('\n', ''), 'base64').toString('utf8');
+}
+
+function readCandidateSourceMetadata(expectedSha, version, token) {
+  const sourceVersion = githubApiGetContent('ki-core-version.txt', expectedSha, token).trim();
+  if (sourceVersion !== version) {
+    throw new Error('Ki-Core candidate archive version does not match its source metadata');
+  }
+  let upstream;
+  try {
+    upstream = JSON.parse(githubApiGetContent('ki-core-upstream.json', expectedSha, token));
+  } catch (error) {
+    throw new Error('Ki-Core candidate AionCore mapping is invalid', { cause: error });
+  }
+  if (
+    upstream?.schemaVersion !== 1 ||
+    upstream?.repository !== 'iOfficeAI/AionCore' ||
+    typeof upstream.tag !== 'string' ||
+    !/^v\d+\.\d+\.\d+$/u.test(upstream.tag) ||
+    typeof upstream.peeledCommit !== 'string' ||
+    !/^[0-9a-f]{40}$/u.test(upstream.peeledCommit)
+  ) {
+    throw new Error('Ki-Core candidate AionCore mapping is invalid');
+  }
+  return {
+    product: { version, tag: null, releaseCommit: expectedSha },
+    upstream: {
+      repository: upstream.repository,
+      tag: upstream.tag,
+      peeledCommit: upstream.peeledCommit,
+    },
+  };
+}
+
 function resolveLatestLegacyTag() {
   const token = getGitHubToken();
   try {
@@ -265,6 +308,16 @@ function validateCandidateArtifactEntries(entries, target) {
   return { archiveName: archiveNames[0], expectedEntries, version };
 }
 
+/**
+ * Downloads and verifies one successful Ki-Core Actions candidate for a fixed source commit.
+ * @param {string} platform Electron platform name.
+ * @param {string} arch Electron target architecture.
+ * @param {string} runId Successful Ki-Core Candidate Build run ID.
+ * @param {string} expectedSha Full lowercase Ki-Core source commit SHA.
+ * @param {string} token Optional GitHub API token.
+ * @returns {{binaryPath: string, manifest: object, tempDir: string, source: object}} Verified candidate inputs.
+ * @throws {Error} When the run, artifact, archive, source metadata, or checksum cannot be verified.
+ */
 function downloadAndVerifyCandidate(platform, arch, runId, expectedSha, token) {
   if (!/^[1-9]\d*$/.test(runId)) throw new Error('Ki-Core candidate run ID must be numeric');
   if (!/^[0-9a-f]{40}$/.test(expectedSha))
@@ -314,7 +367,7 @@ function downloadAndVerifyCandidate(platform, arch, runId, expectedSha, token) {
     const binaryPath = extractExpectedArchive(archivePath, tempDir, target.executable);
     return {
       binaryPath,
-      manifest: null,
+      manifest: readCandidateSourceMetadata(expectedSha, version, token),
       tempDir,
       source: {
         policy: 'candidate',
@@ -325,6 +378,7 @@ function downloadAndVerifyCandidate(platform, arch, runId, expectedSha, token) {
         headSha: expectedSha,
         version,
         artifactName: expectedArtifactName,
+        checksum: sha256File(archivePath),
         url: downloadUrl,
       },
     };
@@ -492,6 +546,7 @@ function prepareAioncore(options) {
 }
 
 module.exports = {
+  downloadAndVerifyCandidate,
   getActionsArtifactMissingMessage,
   getActionsArtifactName,
   prepareAioncore,

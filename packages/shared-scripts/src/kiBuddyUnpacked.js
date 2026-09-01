@@ -77,16 +77,27 @@ function verifyKiCoreProvenance(runtimeDirectory, platform, expectedBuildPlan) {
   } catch {
     throw new Error('Bundled Ki-Core manifest is invalid JSON');
   }
-  if (
-    manifest?.platform !== 'darwin' ||
-    manifest?.arch !== 'arm64' ||
-    manifest?.source?.policy !== 'release-pinned' ||
-    manifest?.source?.repository !== expectedBuildPlan.kiCore.repository ||
-    manifest?.source?.tag !== expectedBuildPlan.kiCore.tag ||
-    manifest?.kiCore?.tag !== expectedBuildPlan.kiCore.tag ||
-    manifest?.kiCore?.releaseCommit !== expectedBuildPlan.kiCore.commit ||
-    !isDeepStrictEqual(manifest?.aionCore, expectedBuildPlan.kiCore.aionCore)
-  ) {
+  const expected = expectedBuildPlan.kiCore;
+  const expectedSourcePolicy = expected.sourcePolicy ?? 'release-pinned';
+  const expectedVersion = expected.version ?? expected.tag?.replace(/^ki-core-v/u, '');
+  const commonMatches =
+    manifest?.platform === 'darwin' &&
+    manifest?.arch === 'arm64' &&
+    manifest?.source?.policy === expectedSourcePolicy &&
+    manifest?.source?.repository === expected.repository &&
+    manifest?.kiCore?.version === expectedVersion &&
+    manifest?.kiCore?.tag === expected.tag &&
+    manifest?.kiCore?.releaseCommit === expected.commit &&
+    isDeepStrictEqual(manifest?.aionCore, expected.aionCore);
+  const sourceMatches =
+    expectedSourcePolicy === 'candidate'
+      ? manifest?.source?.workflow === expected.candidate?.workflow &&
+        Number(manifest?.source?.runId) === expected.candidate?.runId &&
+        manifest?.source?.headSha === expected.commit &&
+        manifest?.source?.artifactName === expected.candidate?.artifactName &&
+        manifest?.source?.checksum === expected.checksum
+      : manifest?.source?.tag === expected.tag;
+  if (!commonMatches || !sourceMatches) {
     throw new Error('Bundled Ki-Core provenance does not match the resolved build plan');
   }
 }
@@ -152,6 +163,8 @@ function toDistributionEvidence(buildPlan) {
     runtimeIdentity: buildPlan.runtimeIdentity,
     kiCore: buildPlan.kiCore,
     secretScope: buildPlan.secretScope,
+    ...(buildPlan.deliveryHistory ? { deliveryHistory: buildPlan.deliveryHistory } : {}),
+    ...(buildPlan.candidate ? { candidate: buildPlan.candidate } : {}),
   };
 }
 

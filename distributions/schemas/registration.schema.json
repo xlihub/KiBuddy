@@ -29,12 +29,23 @@
           "allowed": {
             "type": "object",
             "additionalProperties": false,
-            "required": ["platforms", "integrations", "disabledFeatures", "nonSensitiveConfigKeys"],
+            "required": [
+              "platforms",
+              "integrations",
+              "disabledFeatures",
+              "nonSensitiveConfigKeys",
+              "buildCredentialNames"
+            ],
             "properties": {
               "platforms": { "type": "array", "items": { "type": "string" }, "uniqueItems": true },
               "integrations": { "type": "array", "items": { "type": "string" }, "uniqueItems": true },
               "disabledFeatures": { "type": "array", "items": { "type": "string" }, "uniqueItems": true },
-              "nonSensitiveConfigKeys": { "type": "array", "items": { "type": "string" }, "uniqueItems": true }
+              "nonSensitiveConfigKeys": { "type": "array", "items": { "type": "string" }, "uniqueItems": true },
+              "buildCredentialNames": {
+                "type": "array",
+                "items": { "type": "string", "pattern": "^[A-Z][A-Z0-9_]*$" },
+                "uniqueItems": true
+              }
             }
           }
         }

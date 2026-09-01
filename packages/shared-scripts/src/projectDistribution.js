@@ -1,4 +1,5 @@
 const crypto = require('node:crypto');
+const { execFileSync } = require('node:child_process');
 const fs = require('node:fs');
 const path = require('node:path');
 const { resolveKiBuddyPackagingIdentity } = require('./kiBuddyPackagingIdentity');
@@ -13,6 +14,7 @@ const SEMVER_PATTERN = /^(0|[1-9]\d*)\.(0|[1-9]\d*)\.(0|[1-9]\d*)$/;
 const DISTRIBUTION_ID_PATTERN = /^[a-z0-9]+(?:-[a-z0-9]+)*$/;
 const PROTOCOL_PATTERN = /^[a-z][a-z0-9+.-]*$/;
 const PACKAGE_NAME_PATTERN = /^[a-z0-9]+(?:[-._][a-z0-9]+)*$/;
+const BUILD_CREDENTIAL_NAME_PATTERN = /^[A-Z][A-Z0-9_]*$/;
 const SENSITIVE_KEY_PATTERN =
   /(api.?key|access.?key|authorization|bearer|cookie|session|secret|token|password|credential|private.?key)/iu;
 const IDENTITY_KEYS = [
@@ -197,7 +199,7 @@ function validateRegistry(value, baseProductConfig) {
     }
     const allowed = requireExactKeys(
       registration.allowed,
-      ['platforms', 'integrations', 'disabledFeatures', 'nonSensitiveConfigKeys'],
+      ['platforms', 'integrations', 'disabledFeatures', 'nonSensitiveConfigKeys', 'buildCredentialNames'],
       'Project allowed scope'
     );
     requireUniqueStrings(allowed.platforms, 'Project allowed platforms').forEach((platform) =>
@@ -208,6 +210,11 @@ function validateRegistry(value, baseProductConfig) {
     );
     requireUniqueStrings(allowed.disabledFeatures, 'Project allowed disabled features');
     requireUniqueStrings(allowed.nonSensitiveConfigKeys, 'Project allowed non-sensitive configuration keys');
+    requireUniqueStrings(allowed.buildCredentialNames, 'Project allowed build credential names').forEach((name) => {
+      if (!BUILD_CREDENTIAL_NAME_PATTERN.test(name)) {
+        throw new Error('Project allowed build credential name must use UPPER_SNAKE_CASE');
+      }
+    });
   }
   return registry;
 }
@@ -265,24 +272,247 @@ function validateManifest(value) {
   return manifest;
 }
 
-function validateSource(value) {
-  const source = requireExactKeys(value, ['repository', 'commit', 'treeState'], 'Project source evidence');
+function validateSource(value, mode, distributionId) {
+  const keys =
+    mode === 'formal'
+      ? ['repository', 'commit', 'treeState', 'branch', 'branchHead', 'ruleset']
+      : ['repository', 'commit', 'treeState'];
+  const source = requireExactKeys(value, keys, 'Project source evidence');
   if (source.repository !== 'xlihub/KiBuddy') throw new Error('Project source repository must be xlihub/KiBuddy');
   if (!SHA40_PATTERN.test(source.commit)) {
     throw new Error('Project source commit must be a full lowercase commit SHA');
   }
   if (source.treeState !== 'committed') throw new Error('Project source must identify committed source state');
+  if (mode === 'formal') {
+    const expectedBranch = `distribution/${distributionId}`;
+    if (source.branch !== expectedBranch) {
+      throw new Error(`Formal project source branch must be ${expectedBranch}`);
+    }
+    if (!SHA40_PATTERN.test(source.branchHead)) {
+      throw new Error('Formal project source branch head must be a full lowercase commit SHA');
+    }
+    const ruleset = requireExactKeys(source.ruleset, ['ruleTypes', 'rulesetIds'], 'Formal branch ruleset evidence');
+    const ruleTypes = requireUniqueStrings(ruleset.ruleTypes, 'Formal branch ruleset rule types');
+    for (const requiredRule of ['deletion', 'non_fast_forward']) {
+      if (!ruleTypes.includes(requiredRule)) {
+        throw new Error(`Formal project branch ruleset must enforce ${requiredRule}`);
+      }
+    }
+    if (
+      !Array.isArray(ruleset.rulesetIds) ||
+      ruleset.rulesetIds.length === 0 ||
+      ruleset.rulesetIds.some((id) => !Number.isSafeInteger(id) || id <= 0) ||
+      new Set(ruleset.rulesetIds).size !== ruleset.rulesetIds.length
+    ) {
+      throw new Error('Formal branch ruleset evidence must identify active rulesets');
+    }
+  }
   return source;
 }
 
-function validateKiCore(value, platform) {
-  const kiCore = requireExactKeys(
-    value,
-    ['repository', 'tag', 'commit', 'aionCore', 'checksums'],
-    'Ki-Core provenance'
+function validateDeliveryRecords(value) {
+  const records = requireExactKeys(value, ['schemaVersion', 'deliveries'], 'Project delivery records');
+  if (records.schemaVersion !== 1) throw new Error('Unsupported project delivery records schema');
+  if (!Array.isArray(records.deliveries)) throw new Error('Project deliveries must be an array');
+  const seenVersions = new Set();
+  for (const rawDelivery of records.deliveries) {
+    const delivery = requireExactKeys(
+      rawDelivery,
+      [
+        'distributionId',
+        'version',
+        'sourceCommit',
+        'registrationRevision',
+        'manifestDigest',
+        'platforms',
+        'candidate',
+        'installerChecksums',
+        'custodyReference',
+      ],
+      'Project delivery record'
+    );
+    if (!DISTRIBUTION_ID_PATTERN.test(delivery.distributionId)) {
+      throw new Error('Project delivery distributionId must be a lowercase kebab-case slug');
+    }
+    if (!SEMVER_PATTERN.test(delivery.version)) throw new Error('Project delivery version must be stable SemVer');
+    if (!SHA40_PATTERN.test(delivery.sourceCommit)) {
+      throw new Error('Project delivery source commit must be a full lowercase commit SHA');
+    }
+    if (!SHA40_PATTERN.test(delivery.registrationRevision)) {
+      throw new Error('Project delivery registration revision must be a full lowercase commit SHA');
+    }
+    if (!SHA256_PATTERN.test(delivery.manifestDigest)) {
+      throw new Error('Project delivery manifest digest must be SHA-256');
+    }
+    const platforms = requireUniqueStrings(delivery.platforms, 'Project delivery platforms');
+    if (platforms.length === 0) throw new Error('Project delivery must identify at least one platform');
+    for (const platform of platforms) requireEnum(platform, SUPPORTED_PLATFORMS, 'Project delivery platform');
+    validateCandidateAttempt(delivery.candidate);
+    const checksums = requireRecord(delivery.installerChecksums, 'Project delivery installer checksums');
+    if (
+      Object.keys(checksums).length !== platforms.length ||
+      platforms.some((platform) => !SHA256_PATTERN.test(checksums[platform] ?? ''))
+    ) {
+      throw new Error('Project delivery installer checksums must cover every delivered platform');
+    }
+    requireString(delivery.custodyReference, 'Project delivery custody reference');
+    const versionKey = `${delivery.distributionId}@${delivery.version}`;
+    if (seenVersions.has(versionKey)) throw new Error(`Duplicate project delivery version: ${versionKey}`);
+    seenVersions.add(versionKey);
+  }
+  return records;
+}
+
+function validateCandidateAttempt(value) {
+  const candidate = requireExactKeys(value, ['runId', 'runAttempt'], 'Project candidate attempt');
+  if (!Number.isSafeInteger(candidate.runId) || candidate.runId <= 0) {
+    throw new Error('Project candidate runId must be a positive integer');
+  }
+  if (!Number.isSafeInteger(candidate.runAttempt) || candidate.runAttempt <= 0) {
+    throw new Error('Project candidate runAttempt must be a positive integer');
+  }
+  return candidate;
+}
+
+/**
+ * Normalizes verified Ki-Core candidate output into project build provenance.
+ * @param {object} result Verified Ki-Core candidate download result.
+ * @param {string} platform Canonical project platform key.
+ * @returns {object} Immutable Ki-Core candidate provenance.
+ * @throws {Error} When candidate metadata does not match the project provenance contract.
+ */
+function createProjectKiCoreCandidateProvenance(result, platform) {
+  const candidateResult = requireExactKeys(result, ['manifest', 'source'], 'Verified Ki-Core candidate result');
+  const manifest = requireExactKeys(candidateResult.manifest, ['product', 'upstream'], 'Ki-Core candidate manifest');
+  const product = requireExactKeys(
+    manifest.product,
+    ['version', 'tag', 'releaseCommit'],
+    'Ki-Core candidate product provenance'
   );
+  const source = requireExactKeys(
+    candidateResult.source,
+    ['policy', 'repository', 'workflow', 'runId', 'headSha', 'version', 'artifactName', 'checksum', 'url'],
+    'Ki-Core candidate source provenance'
+  );
+  const normalized = {
+    sourcePolicy: source.policy,
+    repository: source.repository,
+    version: product.version,
+    tag: product.tag,
+    commit: product.releaseCommit,
+    aionCore: clone(manifest.upstream),
+    checksums: { [platform]: source.checksum },
+    candidate: {
+      workflow: source.workflow,
+      runId: Number(source.runId),
+      artifactName: source.artifactName,
+    },
+  };
+  validateKiCore(normalized, platform);
+  if (source.headSha !== normalized.commit || source.version !== normalized.version) {
+    throw new Error('Ki-Core candidate source does not match its source metadata');
+  }
+  return deepFreeze(normalized);
+}
+
+/**
+ * Converts active GitHub branch rules into immutable formal source evidence.
+ * @param {object[]} rules Active rules returned by the GitHub branch rules API.
+ * @returns {{ruleTypes: string[], rulesetIds: number[]}} Immutable Ruleset evidence.
+ * @throws {Error} When deletion or non-fast-forward protection is absent.
+ */
+function createFormalBranchRulesetEvidence(rules) {
+  if (!Array.isArray(rules)) throw new Error('GitHub branch rules response must be an array');
+  const ruleTypes = [...new Set(rules.map((rule) => rule?.type).filter((type) => typeof type === 'string'))].toSorted();
+  const rulesetIds = [
+    ...new Set(rules.map((rule) => rule?.ruleset_id).filter((id) => Number.isSafeInteger(id) && id > 0)),
+  ].toSorted((left, right) => left - right);
+  const evidence = { ruleTypes, rulesetIds };
+  const requiredRules = ['deletion', 'non_fast_forward'];
+  for (const requiredRule of requiredRules) {
+    if (!ruleTypes.includes(requiredRule)) {
+      throw new Error(`Formal project branch ruleset must enforce ${requiredRule}`);
+    }
+  }
+  if (rulesetIds.length === 0) throw new Error('Formal project branch has no active Ruleset');
+  return deepFreeze(evidence);
+}
+
+/**
+ * Verifies that a formal source commit is reachable from the fetched distribution branch.
+ * @param {string} repositoryPath Local Git repository path.
+ * @param {string} sourceSha Full lowercase project source commit SHA.
+ * @param {string} sourceBranch Registered distribution branch name.
+ * @returns {{commit: string, branch: string, branchHead: string}} Immutable reachability evidence.
+ * @throws {Error} When the source or branch is invalid, missing, or unreachable.
+ */
+function verifyFormalSourceReachability(repositoryPath, sourceSha, sourceBranch) {
+  if (!SHA40_PATTERN.test(sourceSha)) {
+    throw new Error('Formal project source commit must be a full lowercase commit SHA');
+  }
+  if (!/^distribution\/[a-z0-9]+(?:-[a-z0-9]+)*$/u.test(sourceBranch)) {
+    throw new Error('Formal project source branch must use distribution/<distributionId>');
+  }
+  const remoteBranchRef = `refs/remotes/origin/${sourceBranch}`;
+  try {
+    const branchHead = execFileSync('git', ['rev-parse', '--verify', remoteBranchRef], {
+      cwd: repositoryPath,
+      encoding: 'utf8',
+      stdio: ['ignore', 'pipe', 'pipe'],
+    }).trim();
+    execFileSync('git', ['merge-base', '--is-ancestor', sourceSha, remoteBranchRef], {
+      cwd: repositoryPath,
+      stdio: ['ignore', 'ignore', 'pipe'],
+    });
+    if (!SHA40_PATTERN.test(branchHead)) throw new Error('invalid branch head');
+    return deepFreeze({ commit: sourceSha, branch: sourceBranch, branchHead });
+  } catch (error) {
+    throw new Error(`Formal project source commit is not reachable from ${sourceBranch}`, { cause: error });
+  }
+}
+
+/**
+ * Creates a candidate record after a formal package has passed independent verification.
+ * @param {object} buildPlan Validated formal project build plan.
+ * @param {{platform: string, fileName: string, checksum: string}} installer Verified installer identity.
+ * @returns {object} Immutable project distribution candidate record.
+ * @throws {Error} When the plan or installer does not satisfy the formal candidate contract.
+ */
+function createProjectDistributionCandidateRecord(buildPlan, installer) {
+  if (buildPlan?.schemaVersion !== 1 || buildPlan?.mode !== 'formal') {
+    throw new Error('Project candidate requires a validated formal build plan');
+  }
+  const artifact = requireExactKeys(installer, ['platform', 'fileName', 'checksum'], 'Project candidate installer');
+  if (!buildPlan.platforms.includes(artifact.platform)) {
+    throw new Error('Project candidate installer platform is not present in the build plan');
+  }
+  requireString(artifact.fileName, 'Project candidate installer file name');
+  if (!SHA256_PATTERN.test(artifact.checksum)) throw new Error('Project candidate installer checksum must be SHA-256');
+  return deepFreeze({
+    schemaVersion: 1,
+    kind: 'project-distribution-candidate',
+    distributionId: buildPlan.distributionId,
+    version: buildPlan.version,
+    attempt: clone(buildPlan.candidate),
+    source: clone(buildPlan.source),
+    registration: clone(buildPlan.registration),
+    manifest: clone(buildPlan.manifest),
+    deliveryHistory: clone(buildPlan.deliveryHistory),
+    baseline: clone(buildPlan.baseline),
+    installer: clone(artifact),
+    kiCore: clone(buildPlan.kiCore),
+  });
+}
+
+function validateKiCore(value, platform) {
+  const sourcePolicy = value?.sourcePolicy ?? 'release-pinned';
+  const keys =
+    sourcePolicy === 'candidate'
+      ? ['sourcePolicy', 'repository', 'version', 'tag', 'commit', 'aionCore', 'checksums', 'candidate']
+      : ['repository', 'tag', 'commit', 'aionCore', 'checksums'];
+  const kiCore = requireExactKeys(value, keys, 'Ki-Core provenance');
+  requireEnum(sourcePolicy, ['release-pinned', 'candidate'], 'Ki-Core source policy');
   if (kiCore.repository !== 'xlihub/Ki-Core') throw new Error('Ki-Core repository is invalid');
-  requireString(kiCore.tag, 'Ki-Core tag');
   if (!SHA40_PATTERN.test(kiCore.commit)) throw new Error('Ki-Core commit must be a full lowercase SHA');
   const aionCore = requireExactKeys(kiCore.aionCore, ['repository', 'tag', 'peeledCommit'], 'AionCore provenance');
   if (aionCore.repository !== 'iOfficeAI/AionCore') throw new Error('AionCore repository is invalid');
@@ -291,6 +521,30 @@ function validateKiCore(value, platform) {
   const checksums = requireRecord(kiCore.checksums, 'Ki-Core checksums');
   if (!SHA256_PATTERN.test(checksums[platform] ?? '')) {
     throw new Error(`Ki-Core checksum for ${platform} is missing or invalid`);
+  }
+  if (sourcePolicy === 'release-pinned') {
+    requireString(kiCore.tag, 'Ki-Core tag');
+    if (!/^ki-core-v(0|[1-9]\d*)\.(0|[1-9]\d*)\.(0|[1-9]\d*)$/u.test(kiCore.tag)) {
+      throw new Error('Ki-Core release tag must use ki-core-vX.Y.Z');
+    }
+    return { ...kiCore, sourcePolicy, version: kiCore.tag.slice('ki-core-v'.length) };
+  }
+  if (!SEMVER_PATTERN.test(kiCore.version) || kiCore.tag !== null) {
+    throw new Error('Ki-Core candidate must identify its version without a release tag');
+  }
+  const candidate = requireExactKeys(
+    kiCore.candidate,
+    ['workflow', 'runId', 'artifactName'],
+    'Ki-Core candidate provenance'
+  );
+  if (candidate.workflow !== 'build-manual.yml') {
+    throw new Error('Ki-Core candidate workflow must be build-manual.yml');
+  }
+  if (!Number.isSafeInteger(candidate.runId) || candidate.runId <= 0) {
+    throw new Error('Ki-Core candidate runId must be a positive integer');
+  }
+  if (candidate.artifactName !== `ki-core-candidate-${platform}`) {
+    throw new Error(`Ki-Core candidate artifact must be ki-core-candidate-${platform}`);
   }
   return kiCore;
 }
@@ -348,20 +602,38 @@ function createEffectiveProductConfig(baseProductConfig, manifest, registration,
   return productConfig;
 }
 
-/** Resolves all project distribution policy into the only plan consumed by preview build stages. */
+/** Resolves all project distribution policy into the only plan consumed by project build stages. */
 function resolveProjectDistributionBuildPlan(input) {
-  const request = requireExactKeys(
-    input,
-    ['registry', 'manifest', 'mode', 'source', 'registrationRevision', 'requestedPlatforms', 'kiCore'],
-    'Project distribution build request'
-  );
+  const inputRecord = requireRecord(input, 'Project distribution build request');
+  const requestKeys =
+    inputRecord.mode === 'formal'
+      ? [
+          'registry',
+          'manifest',
+          'deliveryRecords',
+          'mode',
+          'source',
+          'registrationRevision',
+          'requestedPlatforms',
+          'requestedCredentialNames',
+          'candidate',
+          'kiCore',
+        ]
+      : ['registry', 'manifest', 'mode', 'source', 'registrationRevision', 'requestedPlatforms', 'kiCore'];
+  const request = requireExactKeys(inputRecord, requestKeys, 'Project distribution build request');
   const baseProductConfig = DEFAULT_PRODUCT_CONFIG;
   const registry = validateRegistry(request.registry, baseProductConfig);
   const manifest = validateManifest(request.manifest);
-  if (request.mode !== 'preview') throw new Error('This build contract currently supports preview mode only');
+  requireEnum(request.mode, ['preview', 'formal'], 'Project distribution build mode');
   const registration = registry.registrations.find((item) => item.distributionId === manifest.distributionId);
   if (!registration) throw new Error(`Project distribution ${manifest.distributionId} is not registered`);
-  if (registration.lifecycle === 'retired') {
+  if (request.mode === 'formal' && registration.lifecycle !== 'active') {
+    throw new Error('Only active project registrations can create formal candidates');
+  }
+  if (request.mode === 'formal' && registration.identityMode !== 'local') {
+    throw new Error('Only local project registrations can create formal candidates');
+  }
+  if (request.mode === 'preview' && registration.lifecycle === 'retired') {
     throw new Error('Retired project registrations cannot create previews');
   }
   if (manifest.identityMode !== registration.identityMode) {
@@ -400,11 +672,32 @@ function resolveProjectDistributionBuildPlan(input) {
       throw new Error(`Requested project platform ${platform} is not allowed`);
     }
   }
-  const source = validateSource(request.source);
+  const requestedCredentialNames =
+    request.mode === 'formal'
+      ? requireUniqueStrings(request.requestedCredentialNames, 'Requested project build credential names')
+      : [];
+  for (const credentialName of requestedCredentialNames) {
+    if (!BUILD_CREDENTIAL_NAME_PATTERN.test(credentialName)) {
+      throw new Error('Requested project build credential name must use UPPER_SNAKE_CASE');
+    }
+    if (!registration.allowed.buildCredentialNames.includes(credentialName)) {
+      throw new Error(`Project build credential ${credentialName} is not allowed by its registration`);
+    }
+  }
+  const source = validateSource(request.source, request.mode, manifest.distributionId);
   if (!SHA40_PATTERN.test(request.registrationRevision)) {
     throw new Error('Project registration revision must be a full lowercase commit SHA');
   }
-  const identity = registration.identities.preview;
+  const deliveryRecords = request.mode === 'formal' ? validateDeliveryRecords(request.deliveryRecords) : null;
+  if (
+    deliveryRecords?.deliveries.some(
+      (delivery) => delivery.distributionId === manifest.distributionId && delivery.version === manifest.version
+    )
+  ) {
+    throw new Error(`Project version ${manifest.version} has already been delivered`);
+  }
+  const candidate = request.mode === 'formal' ? validateCandidateAttempt(request.candidate) : null;
+  const identity = registration.identities[request.mode];
   const platform = requestedPlatforms[0];
   const kiCore = validateKiCore(request.kiCore, platform);
   const packagingIdentity = createPackagingIdentity(baseProductConfig, manifest, identity);
@@ -412,12 +705,12 @@ function resolveProjectDistributionBuildPlan(input) {
 
   return deepFreeze({
     schemaVersion: 1,
-    mode: 'preview',
+    mode: request.mode,
     distributionId: manifest.distributionId,
     version: manifest.version,
     identityMode: manifest.identityMode,
     source: clone(source),
-    registration: { revision: request.registrationRevision },
+    registration: { revision: request.registrationRevision, lifecycle: registration.lifecycle },
     manifest: { digest: digestJson(manifest) },
     baseline: clone(manifest.baseline),
     platforms: [...requestedPlatforms],
@@ -429,14 +722,36 @@ function resolveProjectDistributionBuildPlan(input) {
     },
     packagingIdentity,
     productConfig,
-    secretScope: { kind: 'none', names: [] },
+    secretScope:
+      request.mode === 'formal'
+        ? {
+            kind: 'distribution',
+            distributionId: manifest.distributionId,
+            mode: 'formal',
+            names: [...requestedCredentialNames],
+          }
+        : { kind: 'none', names: [] },
+    ...(deliveryRecords
+      ? {
+          deliveryHistory: {
+            digest: digestJson(deliveryRecords),
+            deliveredVersions: deliveryRecords.deliveries
+              .filter((delivery) => delivery?.distributionId === manifest.distributionId)
+              .map((delivery) => delivery.version),
+          },
+          candidate: clone(candidate),
+        }
+      : {}),
     kiCore: {
+      sourcePolicy: kiCore.sourcePolicy,
       repository: kiCore.repository,
+      version: kiCore.version,
       tag: kiCore.tag,
       commit: kiCore.commit,
       aionCore: clone(kiCore.aionCore),
       platform,
       checksum: kiCore.checksums[platform],
+      ...(kiCore.candidate ? { candidate: clone(kiCore.candidate) } : {}),
     },
   });
 }
@@ -460,7 +775,7 @@ function runCli() {
   };
   if (command === 'verify-unpacked') {
     const buildPlan = readJson(value('--build-plan'), 'resolved project distribution build plan');
-    if (buildPlan.schemaVersion !== 1 || buildPlan.mode !== 'preview') {
+    if (buildPlan.schemaVersion !== 1 || !['preview', 'formal'].includes(buildPlan.mode)) {
       throw new Error('Resolved project distribution build plan is invalid');
     }
     const { verifyKiBuddyUnpacked } = require('./kiBuddyUnpacked');
@@ -474,21 +789,107 @@ function runCli() {
     process.stdout.write(`${JSON.stringify(result, null, 2)}\n`);
     return;
   }
+  if (command === 'resolve-ki-core-candidate') {
+    const platform = value('--platform');
+    if (platform !== 'macos-arm64') throw new Error('Formal project candidates currently support macos-arm64 only');
+    const { downloadAndVerifyCandidate } = require('./prepare-aioncore');
+    const result = downloadAndVerifyCandidate(
+      'darwin',
+      'arm64',
+      value('--run-id'),
+      value('--head-sha'),
+      (process.env.KI_CORE_ACTIONS_TOKEN || '').trim()
+    );
+    try {
+      const provenance = createProjectKiCoreCandidateProvenance(result, platform);
+      const outputPath = path.resolve(value('--output'));
+      fs.mkdirSync(path.dirname(outputPath), { recursive: true });
+      fs.writeFileSync(outputPath, `${JSON.stringify(provenance, null, 2)}\n`, 'utf8');
+    } finally {
+      if (result.tempDir) fs.rmSync(result.tempDir, { recursive: true, force: true });
+    }
+    return;
+  }
+  if (command === 'resolve-branch-rules') {
+    const rules = readJson(value('--rules'), 'GitHub branch rules');
+    const evidence = createFormalBranchRulesetEvidence(rules);
+    const outputPath = path.resolve(value('--output'));
+    fs.mkdirSync(path.dirname(outputPath), { recursive: true });
+    fs.writeFileSync(outputPath, `${JSON.stringify(evidence, null, 2)}\n`, 'utf8');
+    return;
+  }
+  if (command === 'verify-source-reachability') {
+    const evidence = verifyFormalSourceReachability(
+      path.resolve(value('--repository')),
+      value('--source-sha'),
+      value('--source-branch')
+    );
+    const outputPath = path.resolve(value('--output'));
+    fs.mkdirSync(path.dirname(outputPath), { recursive: true });
+    fs.writeFileSync(outputPath, `${JSON.stringify(evidence, null, 2)}\n`, 'utf8');
+    return;
+  }
+  if (command === 'create-candidate') {
+    const buildPlan = readJson(value('--build-plan'), 'resolved project distribution build plan');
+    const installerPath = path.resolve(value('--installer'));
+    const checksum = crypto.createHash('sha256').update(fs.readFileSync(installerPath)).digest('hex');
+    const record = createProjectDistributionCandidateRecord(buildPlan, {
+      platform: value('--platform'),
+      fileName: path.basename(installerPath),
+      checksum,
+    });
+    const outputPath = path.resolve(value('--output'));
+    fs.mkdirSync(path.dirname(outputPath), { recursive: true });
+    fs.writeFileSync(outputPath, `${JSON.stringify(record, null, 2)}\n`, 'utf8');
+    return;
+  }
   if (command !== 'resolve') throw new Error(`Unsupported project distribution command: ${command}`);
   const productConfig = readJson(value('--product-config'), 'Ki-Buddy product configuration');
   const platform = value('--platform');
+  const modeIndex = args.indexOf('--mode');
+  const mode = modeIndex === -1 ? 'preview' : args[modeIndex + 1];
+  const isFormal = mode === 'formal';
+  const source = isFormal
+    ? (() => {
+        const reachability = readJson(value('--source-reachability'), 'formal source reachability evidence');
+        if (reachability.commit !== value('--source-sha') || reachability.branch !== value('--source-branch')) {
+          throw new Error('Formal source reachability evidence does not match the build request');
+        }
+        return {
+          repository: 'xlihub/KiBuddy',
+          commit: reachability.commit,
+          treeState: 'committed',
+          branch: reachability.branch,
+          branchHead: reachability.branchHead,
+          ruleset: readJson(value('--ruleset-evidence'), 'formal branch ruleset evidence'),
+        };
+      })()
+    : {
+        repository: 'xlihub/KiBuddy',
+        commit: value('--source-sha'),
+        treeState: 'committed',
+      };
   const plan = resolveProjectDistributionBuildPlan({
     registry: readJson(value('--registry'), 'project distribution registry'),
     manifest: readJson(value('--manifest'), 'project distribution manifest'),
-    mode: 'preview',
-    source: {
-      repository: 'xlihub/KiBuddy',
-      commit: value('--source-sha'),
-      treeState: 'committed',
-    },
+    ...(isFormal
+      ? {
+          deliveryRecords: readJson(value('--delivery-records'), 'project delivery records'),
+          requestedCredentialNames: JSON.parse(value('--build-credential-names')),
+          candidate: {
+            runId: Number(value('--run-id')),
+            runAttempt: Number(value('--run-attempt')),
+          },
+        }
+      : {}),
+    mode,
+    source,
     registrationRevision: value('--registration-revision'),
     requestedPlatforms: [platform],
-    kiCore: productConfig.kiCore,
+    kiCore:
+      isFormal && args.includes('--ki-core-provenance')
+        ? readJson(value('--ki-core-provenance'), 'verified Ki-Core provenance')
+        : productConfig.kiCore,
   });
   const outputPath = path.resolve(value('--output'));
   fs.mkdirSync(path.dirname(outputPath), { recursive: true });
@@ -504,4 +905,10 @@ if (require.main === module) {
   }
 }
 
-module.exports = { resolveProjectDistributionBuildPlan };
+module.exports = {
+  createFormalBranchRulesetEvidence,
+  createProjectDistributionCandidateRecord,
+  createProjectKiCoreCandidateProvenance,
+  resolveProjectDistributionBuildPlan,
+  verifyFormalSourceReachability,
+};
