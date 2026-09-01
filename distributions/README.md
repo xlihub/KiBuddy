@@ -10,5 +10,12 @@
 - `baseline.commit`：该分发分支实际基于的 `product/main` 完整 commit SHA。
 - `resources`：分发分支内的非敏感品牌资源路径；界面产品名必须保持 `Ki-Buddy`。
 - `nonSensitiveConfig`：键必须由受信注册的 `allowed.nonSensitiveConfigKeys` 明确允许，且只能包含随包公开的配置。`zxjt` 当前允许列表为空，因此该对象必须保持 `{}`。
+- `allowed.buildCredentialNames`：声明正式构建可以请求的凭据名称，只记录名称，不保存凭据值。名称必须使用 `UPPER_SNAKE_CASE`；`zxjt` 当前为 `[]`，因此不能请求任何项目构建凭据。
 
 `.github/workflows/build-project-preview.yml` 先从 `product/main` 读取受信注册，再解析并固定 source SHA、注册 revision、manifest digest、baseline、平台、Ki-Core 来源和预览身份。验证完成前不会安装或执行项目分支代码，工作流也不读取正式环境凭据。
+
+`.github/workflows/build-project-preview.yml` 选择 `formal` mode 后，只接受 `distribution/<distributionId>` 中可达的完整小写 commit SHA。验证 job 会在执行项目代码前读取 GitHub 的 active branch rules，要求 `deletion` 与 `non_fast_forward` 规则同时生效，并由同一 build contract 校验 active lifecycle、清单版本、正式身份、平台、`delivery-records.json`、请求凭据 allowlist 和 Ki-Core provenance。workflow dispatch 不接收凭据名称；当前 `zxjt` 为 `local` 身份且没有获准的构建凭据，因此正式 workflow 固定请求空列表，也不向项目源码传递项目 secret。
+
+正式构建按 `distributionId + version` 串行。只有独立验证 job 成功后才上传正式 candidate；artifact 名称、build plan 和 `project-candidate.json` 都包含 GitHub run ID 与 run attempt，重复尝试不会覆盖前一次。失败 run 可能保留 1 天的内部验证材料或未验证构建，但不会形成正式 candidate。
+
+`delivery-records.json` 保存已经确认交付的长期记录。确认安装验收和持久保管副本后，维护者按 `schemas/delivery-record.schema.json` 添加项目版本、源码、注册 revision、manifest digest、candidate attempt、平台 checksum 和保管引用。已记录版本不能再次生成正式 candidate；安装包丢失时发布新的 patch 版本。

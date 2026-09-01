@@ -87,6 +87,15 @@ async function createCandidateToolchain(root: string) {
   const archiveName = `ki-core-v${CANDIDATE_VERSION}-x86_64-unknown-linux-gnu.tar.gz`;
   const archivePath = join(root, archiveName);
   const artifactZip = join(root, 'candidate.zip');
+  const versionContent = Buffer.from(`${CANDIDATE_VERSION}\n`).toString('base64');
+  const upstreamContent = Buffer.from(
+    JSON.stringify({
+      schemaVersion: 1,
+      repository: 'iOfficeAI/AionCore',
+      tag: 'v0.1.73',
+      peeledCommit: 'b'.repeat(40),
+    })
+  ).toString('base64');
   const binaryPath = join(sourceDir, 'aioncore');
   mkdirSync(sourceDir, { recursive: true });
   writeFileSync(
@@ -135,6 +144,10 @@ if [[ "$url" == *'/actions/runs/123/artifacts?per_page=100' ]]; then
   printf '%s' '{"artifacts":[{"id":456,"name":"ki-core-candidate-linux-x64","expired":false,"archive_download_url":"https://example.invalid/candidate.zip"}]}'
 elif [[ "$url" == *'/actions/runs/123' ]]; then
   printf '%s' '{"conclusion":"success","event":"workflow_dispatch","head_branch":"product/main","head_sha":"${VALID_SHA}","path":".github/workflows/build-manual.yml","repository":{"full_name":"xlihub/Ki-Core"},"status":"completed"}'
+elif [[ "$url" == *'/contents/ki-core-version.txt?ref=${VALID_SHA}' ]]; then
+  printf '%s' '{"encoding":"base64","content":"${versionContent}"}'
+elif [[ "$url" == *'/contents/ki-core-upstream.json?ref=${VALID_SHA}' ]]; then
+  printf '%s' '{"encoding":"base64","content":"${upstreamContent}"}'
 elif [[ "$url" == 'https://example.invalid/candidate.zip' ]]; then
   cp ${shellQuote(artifactZip)} "$out"
 else
@@ -270,8 +283,12 @@ describe('Ki-Core candidate source policy', () => {
         version: CANDIDATE_VERSION,
         artifactName: 'ki-core-candidate-linux-x64',
       });
-      expect(manifest.kiCore).toEqual({ version: CANDIDATE_VERSION, tag: null, releaseCommit: null });
-      expect(manifest.aionCore).toEqual({ repository: null, tag: null, peeledCommit: null });
+      expect(manifest.kiCore).toEqual({ version: CANDIDATE_VERSION, tag: null, releaseCommit: VALID_SHA });
+      expect(manifest.aionCore).toEqual({
+        repository: 'iOfficeAI/AionCore',
+        tag: 'v0.1.73',
+        peeledCommit: 'b'.repeat(40),
+      });
       const productIdentity = readKiBuddyRelease(process.cwd());
       expect(manifest).toMatchObject({
         schemaVersion: 3,

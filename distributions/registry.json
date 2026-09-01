@@ -27,7 +27,8 @@
         "platforms": ["macos-arm64"],
         "integrations": [],
         "disabledFeatures": ["account", "about", "feedback", "githubResources"],
-        "nonSensitiveConfigKeys": []
+        "nonSensitiveConfigKeys": [],
+        "buildCredentialNames": []
       }
     }
   ]

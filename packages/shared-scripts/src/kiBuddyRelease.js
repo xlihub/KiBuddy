@@ -523,6 +523,10 @@ function createKiBuddyBuildEvidence(projectRoot, outputPath, options = {}) {
             runtimeIdentity: options.distributionBuildPlan.runtimeIdentity,
             kiCore: options.distributionBuildPlan.kiCore,
             secretScope: options.distributionBuildPlan.secretScope,
+            ...(options.distributionBuildPlan.deliveryHistory
+              ? { deliveryHistory: options.distributionBuildPlan.deliveryHistory }
+              : {}),
+            ...(options.distributionBuildPlan.candidate ? { candidate: options.distributionBuildPlan.candidate } : {}),
           },
         }
       : {}),

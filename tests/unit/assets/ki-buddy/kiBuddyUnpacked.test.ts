@@ -173,6 +173,7 @@ function createMacFixture(expectedIdentity, bundleIdentifier: string, expectedBu
     })
   );
   if (expectedBuildPlan) {
+    const sourcePolicy = expectedBuildPlan.kiCore.sourcePolicy ?? 'release-pinned';
     writeFileSync(
       join(runtimeDirectory, 'manifest.json'),
       JSON.stringify({
@@ -180,11 +181,20 @@ function createMacFixture(expectedIdentity, bundleIdentifier: string, expectedBu
         platform: 'darwin',
         arch: 'arm64',
         source: {
-          policy: 'release-pinned',
+          policy: sourcePolicy,
           repository: expectedBuildPlan.kiCore.repository,
-          tag: expectedBuildPlan.kiCore.tag,
+          ...(sourcePolicy === 'candidate'
+            ? {
+                workflow: expectedBuildPlan.kiCore.candidate.workflow,
+                runId: String(expectedBuildPlan.kiCore.candidate.runId),
+                headSha: expectedBuildPlan.kiCore.commit,
+                artifactName: expectedBuildPlan.kiCore.candidate.artifactName,
+                checksum: expectedBuildPlan.kiCore.checksum,
+              }
+            : { tag: expectedBuildPlan.kiCore.tag }),
         },
         kiCore: {
+          version: expectedBuildPlan.kiCore.version ?? expectedBuildPlan.kiCore.tag.replace(/^ki-core-v/u, ''),
           tag: expectedBuildPlan.kiCore.tag,
           releaseCommit: expectedBuildPlan.kiCore.commit,
         },
@@ -350,6 +360,34 @@ describe('Ki-Buddy unpacked product verification', () => {
       rmSync(fixture, { recursive: true, force: true });
     }
   });
+
+  it.runIf(process.platform === 'darwin')(
+    'accepts a macOS project app with verified Ki-Core candidate provenance',
+    () => {
+      const identity = createProjectPackagingOverlay();
+      const buildPlan = projectBuildPlan(identity);
+      buildPlan.kiCore = {
+        ...buildPlan.kiCore,
+        sourcePolicy: 'candidate',
+        version: '0.1.5',
+        tag: null,
+        candidate: {
+          workflow: 'build-manual.yml',
+          runId: 801,
+          artifactName: 'ki-core-candidate-macos-arm64',
+        },
+      };
+      const fixture = createMacFixture(identity, identity.desktop.appId, buildPlan);
+      try {
+        expect(verifyKiBuddyUnpacked(projectRoot, fixture, 'darwin', identity, buildPlan)).toMatchObject({
+          platform: 'darwin',
+          managedNodePath: expect.stringContaining('darwin-arm64'),
+        });
+      } finally {
+        rmSync(fixture, { recursive: true, force: true });
+      }
+    }
+  );
 
   it.runIf(process.platform === 'darwin')('rejects a macOS project app with unapproved Ki-Core provenance', () => {
     const identity = createProjectPackagingOverlay();

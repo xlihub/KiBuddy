@@ -1,8 +1,16 @@
-name: Build project preview
+name: Build project package
 
 on:
   workflow_dispatch:
     inputs:
+      mode:
+        description: Project package mode
+        required: true
+        default: preview
+        type: choice
+        options:
+          - preview
+          - formal
       distribution_id:
         description: Registered project distribution id
         required: true
@@ -11,12 +19,37 @@ on:
         description: Full KiBuddy source commit SHA
         required: true
         type: string
+      version:
+        description: 'Formal only: exact project SemVer from distribution-manifest.json'
+        required: false
+        type: string
+      ki_core_source_policy:
+        description: 'Formal only: immutable Ki-Core Release pin or verified candidate artifact'
+        required: true
+        default: release-pinned
+        type: choice
+        options:
+          - release-pinned
+          - candidate
+      ki_core_candidate_run_id:
+        description: 'Formal candidate only: successful Ki-Core Candidate Build run ID'
+        required: false
+        type: string
+      ki_core_candidate_head_sha:
+        description: 'Formal candidate only: full Ki-Core product/main commit SHA'
+        required: false
+        type: string
 
 permissions:
   contents: read
 
+concurrency:
+  group: project-${{ inputs.mode }}-${{ inputs.distribution_id }}-${{ inputs.mode == 'formal' && inputs.version || github.run_id }}
+  cancel-in-progress: false
+
 jobs:
   validate:
+    if: inputs.mode == 'preview'
     runs-on: macos-14
     timeout-minutes: 10
     outputs:
@@ -79,6 +112,7 @@ jobs:
           path: validated/project-build-plan.json
 
   build:
+    if: inputs.mode == 'preview'
     needs: validate
     runs-on: macos-14
     timeout-minutes: 60
@@ -129,6 +163,7 @@ jobs:
             source/out/project-distribution/project-build-evidence.json
 
   verify:
+    if: inputs.mode == 'preview'
     needs: [validate, build]
     runs-on: macos-14
     timeout-minutes: 15
@@ -227,3 +262,269 @@ jobs:
             expected/project-build-plan.json
             verified/project-build-evidence.json
             verified/project-preview-dmg.sha256
+
+  formal_validate:
+    if: inputs.mode == 'formal'
+    runs-on: macos-14
+    timeout-minutes: 15
+    outputs:
+      registration_revision: ${{ steps.resolve.outputs.registration_revision }}
+    env:
+      BUILD_PLAN: ${{ github.workspace }}/validated/project-build-plan.json
+      GITHUB_TOKEN: ${{ github.token }}
+    steps:
+      - name: Checkout trusted product policy
+        uses: actions/checkout@v6
+        with:
+          ref: product/main
+          fetch-depth: 0
+          path: trusted
+          persist-credentials: false
+
+      - name: Checkout requested project source
+        uses: actions/checkout@v6
+        with:
+          ref: ${{ inputs.source_sha }}
+          fetch-depth: 0
+          path: source
+          persist-credentials: false
+
+      - name: Set up Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+
+      - name: Resolve protected formal build plan
+        id: resolve
+        shell: bash
+        env:
+          DISTRIBUTION_ID: ${{ inputs.distribution_id }}
+          PROJECT_VERSION: ${{ inputs.version }}
+          SOURCE_SHA: ${{ inputs.source_sha }}
+          KI_CORE_SOURCE_POLICY: ${{ inputs.ki_core_source_policy }}
+          KI_CORE_CANDIDATE_RUN_ID: ${{ inputs.ki_core_candidate_run_id }}
+          KI_CORE_CANDIDATE_HEAD_SHA: ${{ inputs.ki_core_candidate_head_sha }}
+          PROJECT_PLATFORM: macos-arm64
+        run: |
+          set -euo pipefail
+          test "$GITHUB_REF" = 'refs/heads/product/main'
+          [[ "$DISTRIBUTION_ID" =~ ^[a-z0-9]+(-[a-z0-9]+)*$ ]]
+          [[ "$PROJECT_VERSION" =~ ^(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)$ ]]
+          [[ "$SOURCE_SHA" =~ ^[0-9a-f]{40}$ ]]
+          test "$(git -C source rev-parse HEAD)" = "$SOURCE_SHA"
+          test "$(node -p "require('./source/distribution-manifest.json').distributionId")" = "$DISTRIBUTION_ID"
+          test "$(node -p "require('./source/distribution-manifest.json').version")" = "$PROJECT_VERSION"
+
+          SOURCE_BRANCH="distribution/$DISTRIBUTION_ID"
+          git -C source fetch --no-tags origin "$SOURCE_BRANCH:refs/remotes/origin/$SOURCE_BRANCH"
+          node trusted/packages/shared-scripts/src/projectDistribution.js verify-source-reachability \
+            --repository source \
+            --source-sha "$SOURCE_SHA" \
+            --source-branch "$SOURCE_BRANCH" \
+            --output validated/source-reachability.json
+
+          mkdir -p validated
+          encoded_branch="${SOURCE_BRANCH//\//%2F}"
+          curl --fail --silent --show-error --location \
+            -H 'Accept: application/vnd.github+json' \
+            -H "Authorization: Bearer $GITHUB_TOKEN" \
+            -H 'X-GitHub-Api-Version: 2022-11-28' \
+            "$GITHUB_API_URL/repos/$GITHUB_REPOSITORY/rules/branches/$encoded_branch?per_page=100" \
+            --output validated/github-branch-rules.json
+          node trusted/packages/shared-scripts/src/projectDistribution.js resolve-branch-rules \
+            --rules validated/github-branch-rules.json \
+            --output validated/branch-ruleset-evidence.json
+
+          registration_revision="$(git -C trusted rev-parse HEAD)"
+          common_args=(
+            --registry trusted/distributions/registry.json
+            --manifest source/distribution-manifest.json
+            --delivery-records trusted/distributions/delivery-records.json
+            --product-config trusted/ki-buddy-product.json
+            --mode formal
+            --platform "$PROJECT_PLATFORM"
+            --source-sha "$SOURCE_SHA"
+            --source-branch "$SOURCE_BRANCH"
+            --source-reachability validated/source-reachability.json
+            --ruleset-evidence validated/branch-ruleset-evidence.json
+            --registration-revision "$registration_revision"
+            --build-credential-names '[]'
+            --run-id "$GITHUB_RUN_ID"
+            --run-attempt "$GITHUB_RUN_ATTEMPT"
+            --output "$BUILD_PLAN"
+          )
+
+          case "$KI_CORE_SOURCE_POLICY" in
+            release-pinned)
+              test -z "$KI_CORE_CANDIDATE_RUN_ID"
+              test -z "$KI_CORE_CANDIDATE_HEAD_SHA"
+              node trusted/packages/shared-scripts/src/projectDistribution.js resolve "${common_args[@]}"
+              ;;
+            candidate)
+              [[ "$KI_CORE_CANDIDATE_RUN_ID" =~ ^[1-9][0-9]*$ ]]
+              [[ "$KI_CORE_CANDIDATE_HEAD_SHA" =~ ^[0-9a-f]{40}$ ]]
+              node trusted/packages/shared-scripts/src/projectDistribution.js resolve-ki-core-candidate \
+                --platform "$PROJECT_PLATFORM" \
+                --run-id "$KI_CORE_CANDIDATE_RUN_ID" \
+                --head-sha "$KI_CORE_CANDIDATE_HEAD_SHA" \
+                --output validated/ki-core-candidate-provenance.json
+              node trusted/packages/shared-scripts/src/projectDistribution.js resolve \
+                "${common_args[@]}" \
+                --ki-core-provenance validated/ki-core-candidate-provenance.json
+              ;;
+            *)
+              echo "Unsupported Ki-Core source policy: $KI_CORE_SOURCE_POLICY" >&2
+              exit 1
+              ;;
+          esac
+
+          baseline="$(node -p "require('./validated/project-build-plan.json').baseline.commit")"
+          git -C source merge-base --is-ancestor "$baseline" "$SOURCE_SHA"
+          printf 'registration_revision=%s\n' "$registration_revision" >> "$GITHUB_OUTPUT"
+
+      - name: Upload immutable formal build plan
+        uses: actions/upload-artifact@v6
+        with:
+          name: project-formal-plan-${{ github.run_id }}-${{ github.run_attempt }}
+          if-no-files-found: error
+          retention-days: 1
+          path: validated/
+
+  formal_build:
+    if: inputs.mode == 'formal'
+    needs: formal_validate
+    runs-on: macos-14
+    timeout-minutes: 60
+    env:
+      KI_BUDDY_RESOLVED_BUILD_PLAN: ${{ github.workspace }}/validated/project-build-plan.json
+      AIONUI_BACKEND_SOURCE_POLICY: ${{ inputs.ki_core_source_policy }}
+      AIONUI_BACKEND_RUN_ID: ${{ inputs.ki_core_candidate_run_id }}
+      AIONUI_BACKEND_EXPECTED_SHA: ${{ inputs.ki_core_candidate_head_sha }}
+    steps:
+      - name: Checkout requested project source
+        uses: actions/checkout@v6
+        with:
+          ref: ${{ inputs.source_sha }}
+          fetch-depth: 0
+          path: source
+          persist-credentials: false
+
+      - name: Download immutable formal build plan
+        uses: actions/download-artifact@v7
+        with:
+          name: project-formal-plan-${{ github.run_id }}-${{ github.run_attempt }}
+          path: validated
+
+      - name: Set up Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+
+      - name: Set up Bun
+        uses: oven-sh/setup-bun@v2
+        with:
+          bun-version: latest
+
+      - name: Install project dependencies
+        working-directory: source
+        run: bun install --frozen-lockfile
+
+      - name: Build macOS arm64 formal package
+        working-directory: source
+        run: node scripts/build-with-builder.js arm64 --mac --arm64
+
+      - name: Upload unverified formal build
+        uses: actions/upload-artifact@v6
+        with:
+          name: project-formal-build-${{ github.run_id }}-${{ github.run_attempt }}
+          if-no-files-found: error
+          retention-days: 1
+          path: |
+            source/out/*.dmg
+            source/out/project-distribution/project-build-evidence.json
+
+  formal_verify:
+    if: inputs.mode == 'formal'
+    needs: [formal_validate, formal_build]
+    runs-on: macos-14
+    timeout-minutes: 15
+    steps:
+      - name: Checkout exact trusted registration revision
+        uses: actions/checkout@v6
+        with:
+          ref: ${{ needs.formal_validate.outputs.registration_revision }}
+          path: trusted
+          persist-credentials: false
+
+      - name: Checkout requested project source
+        uses: actions/checkout@v6
+        with:
+          ref: ${{ inputs.source_sha }}
+          fetch-depth: 0
+          path: source
+          persist-credentials: false
+
+      - name: Set up Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+
+      - name: Download immutable formal build plan
+        uses: actions/download-artifact@v7
+        with:
+          name: project-formal-plan-${{ github.run_id }}-${{ github.run_attempt }}
+          path: validated
+
+      - name: Download unverified formal build
+        uses: actions/download-artifact@v7
+        with:
+          name: project-formal-build-${{ github.run_id }}-${{ github.run_attempt }}
+          path: candidate
+
+      - name: Verify formal package and create candidate record
+        shell: bash
+        run: |
+          set -euo pipefail
+          dmg_count="$(find candidate -type f -name '*.dmg' -print | wc -l | tr -d ' ')"
+          test "$dmg_count" = 1
+          dmg_path="$(find candidate -type f -name '*.dmg' -print -quit)"
+          evidence_count="$(find candidate -type f -name 'project-build-evidence.json' -print | wc -l | tr -d ' ')"
+          test "$evidence_count" = 1
+          standalone_evidence="$(find candidate -type f -name 'project-build-evidence.json' -print -quit)"
+          mount_point="$RUNNER_TEMP/project-formal-dmg"
+          mkdir -p "$mount_point" verified
+          hdiutil attach "$dmg_path" -nobrowse -readonly -mountpoint "$mount_point"
+          cleanup() { hdiutil detach "$mount_point" >/dev/null; }
+          trap cleanup EXIT
+          app_count="$(find "$mount_point" -maxdepth 2 -type d -name '*.app' -print | wc -l | tr -d ' ')"
+          test "$app_count" = 1
+          app_path="$(find "$mount_point" -maxdepth 2 -type d -name '*.app' -print -quit)"
+          node trusted/packages/shared-scripts/src/projectDistribution.js verify-unpacked \
+            --project-root source \
+            --path "$app_path" \
+            --platform darwin \
+            --build-plan validated/project-build-plan.json
+          packaged_evidence="$app_path/Contents/Resources/project-distribution/project-build-evidence.json"
+          cmp "$standalone_evidence" "$packaged_evidence"
+          cp "$standalone_evidence" verified/project-build-evidence.json
+          node trusted/packages/shared-scripts/src/projectDistribution.js create-candidate \
+            --build-plan validated/project-build-plan.json \
+            --installer "$dmg_path" \
+            --platform macos-arm64 \
+            --output verified/project-candidate.json
+          shasum -a 256 "$dmg_path" > verified/project-formal-dmg.sha256
+          hdiutil detach "$mount_point"
+          trap - EXIT
+
+      - name: Upload formal candidate attempt
+        uses: actions/upload-artifact@v6
+        with:
+          name: ki-buddy-${{ inputs.distribution_id }}-${{ inputs.version }}-candidate-${{ github.run_id }}-${{ github.run_attempt }}
+          if-no-files-found: error
+          retention-days: 30
+          path: |
+            candidate/**/*.dmg
+            validated/project-build-plan.json
+            verified/project-build-evidence.json
+            verified/project-candidate.json
+            verified/project-formal-dmg.sha256
