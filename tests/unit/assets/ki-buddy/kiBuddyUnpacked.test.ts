@@ -419,17 +419,17 @@ describe('Ki-Buddy unpacked product verification', () => {
 
   it('materializes and cleans a Windows application installed by the NSIS executable', () => {
     const identity = createProjectPackagingOverlay();
-    const tempRoot = mkdtempSync(join(tmpdir(), 'ki-buddy-installer-test-'));
+    const tempRoot = mkdtempSync(join(tmpdir(), 'ki-buddy installer test-'));
     const installerPath = join(tempRoot, 'ki-buddy-zxjt.exe');
     const installPath = join(tempRoot, 'installed');
     const uninstallPath = join(installPath, `Uninstall ${identity.desktop.productName}.exe`);
     writeFileSync(installerPath, 'installer');
-    const calls: Array<{ command: string; args: string[] }> = [];
+    const calls: Array<{ command: string; args: string[]; windowsVerbatimArguments?: boolean }> = [];
 
     const materialized = materializeKiBuddyInstaller(installerPath, 'windows-x64', identity, {
       tempRoot,
-      execute(command: string, args: string[]) {
-        calls.push({ command, args });
+      execute(command: string, args: string[], options: { windowsVerbatimArguments?: boolean }) {
+        calls.push({ command, args, windowsVerbatimArguments: options.windowsVerbatimArguments });
         if (command === installerPath) {
           mkdirSync(installPath, { recursive: true });
           writeFileSync(uninstallPath, 'uninstaller');
@@ -440,8 +440,8 @@ describe('Ki-Buddy unpacked product verification', () => {
     expect(materialized).toMatchObject({ packageRoot: installPath, unpackedPath: installPath });
     materialized.cleanup();
     expect(calls).toEqual([
-      { command: installerPath, args: ['/S', `/D=${installPath}`] },
-      { command: uninstallPath, args: ['/S'] },
+      { command: installerPath, args: ['/S', `/D=${installPath}`], windowsVerbatimArguments: true },
+      { command: uninstallPath, args: ['/S', `_?=${installPath}`], windowsVerbatimArguments: true },
     ]);
     expect(existsSync(tempRoot)).toBe(false);
   });
