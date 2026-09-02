@@ -14,6 +14,7 @@ const { execSync, spawnSync } = require('child_process');
 const fs = require('fs');
 const path = require('path');
 const crypto = require('crypto');
+const { hasKeytarDependency, verifyPackagedKeytar } = require('./rebuildNativeModules');
 
 // DMG retry logic for macOS: detects DMG creation failures by checking artifacts
 // (.app exists but .dmg missing) and retries only the DMG step using
@@ -426,17 +427,19 @@ function cleanupDiskImages() {
   }
 }
 
-// Find the .app directory from electron-builder output
-function findAppDir(outDir) {
-  const candidates = ['mac', 'mac-arm64', 'mac-x64', 'mac-universal'];
-  for (const dir of candidates) {
-    const fullPath = path.join(outDir, dir);
-    if (fs.existsSync(fullPath)) {
-      const hasApp = fs.readdirSync(fullPath).some((f) => f.endsWith('.app'));
-      if (hasApp) return fullPath;
-    }
-  }
-  return null;
+// Match electron-builder's product filename and architecture output directory.
+function findAppPath(outDir, targetArch, builderConfig) {
+  const { archFromString, getArchSuffix } = require('builder-util');
+  const { sanitizeFileName } = require('builder-util/out/filename');
+  const metadata = JSON.parse(fs.readFileSync(path.resolve(__dirname, '../package.json'), 'utf8'));
+  const productName = builderConfig.productName || metadata.productName || metadata.name;
+  const executableName = builderConfig.mac?.executableName ?? builderConfig.executableName ?? productName;
+  const appPath = path.join(
+    outDir,
+    `mac${getArchSuffix(archFromString(targetArch), builderConfig.mac?.defaultArch)}`,
+    `${sanitizeFileName(executableName)}.app`
+  );
+  return fs.statSync(appPath, { throwIfNoEntry: false })?.isDirectory() ? appPath : null;
 }
 
 // Check if DMG exists in output directory
@@ -522,11 +525,7 @@ function getBuildVersionOverride() {
 
 // Create macOS distributables using electron-builder --prepackaged with .app path.
 // This preserves DMG styling and still emits the zip required by MacUpdater.
-function createMacArtifactsWithPrepackaged(appDir, targetArch, builderConfigPath) {
-  const appName = fs.readdirSync(appDir).find((f) => f.endsWith('.app'));
-  if (!appName) throw new Error(`No .app found in ${appDir}`);
-  const appPath = path.join(appDir, appName);
-
+function createMacArtifactsWithPrepackaged(appPath, targetArch, builderConfigPath) {
   execSync(
     `bunx electron-builder --config "${builderConfigPath}" --mac dmg zip --${targetArch} --prepackaged "${appPath}" --publish=never`,
     {
@@ -544,21 +543,23 @@ function buildWithDmgRetry(cmd, targetArch, builderConfigPath) {
     execSync(cmd, { stdio: 'inherit', shell: process.platform === 'win32' });
     return;
   } catch (error) {
-    // On non-macOS or if .app doesn't exist, just throw
-    const appDir = isMac ? findAppDir(outDir) : null;
-    if (!appDir || dmgExists(outDir)) throw error;
-
-    // .app exists but no .dmg → DMG creation failed
-    console.log('\n🔄 Build failed during DMG creation (.app exists, .dmg missing)');
-    console.log('   Retrying macOS distributable creation with --prepackaged...');
+    if (!isMac || dmgExists(outDir)) throw error;
+    const builderConfig = JSON.parse(fs.readFileSync(builderConfigPath, 'utf8'));
+    const appPath = findAppPath(outDir, targetArch, builderConfig);
+    if (!appPath) throw error;
+    const appDir = path.resolve(__dirname, '..', builderConfig.directories?.app || '.');
 
     for (let attempt = 1; attempt <= DMG_RETRY_MAX; attempt++) {
+      // --prepackaged skips packaging hooks. Validation failures must escape the retry catch.
+      if (hasKeytarDependency(appDir)) {
+        verifyPackagedKeytar(path.join(appPath, 'Contents', 'Resources'), 'darwin', targetArch);
+      }
       cleanupDiskImages();
       spawnSync('sleep', [String(DMG_RETRY_DELAY_SEC)]);
 
       try {
         console.log(`\n📀 DMG retry attempt ${attempt}/${DMG_RETRY_MAX}...`);
-        createMacArtifactsWithPrepackaged(appDir, targetArch, builderConfigPath);
+        createMacArtifactsWithPrepackaged(appPath, targetArch, builderConfigPath);
         console.log('✅ macOS distributables created successfully on retry');
         return;
       } catch (retryError) {
