@@ -45,6 +45,10 @@ function formalValidationScript(): string {
 }
 
 describe('project formal workflow trust boundary', () => {
+  it.each(['build', 'formal_build'])('gives %s the established 8 GiB Node heap budget', (jobName) => {
+    expect(workflow().jobs[jobName].env?.NODE_OPTIONS).toBe('--max-old-space-size=8192');
+  });
+
   it('serializes each formal distribution version without coupling preview runs', () => {
     const config = workflow();
 
