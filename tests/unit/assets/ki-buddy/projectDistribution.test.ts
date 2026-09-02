@@ -373,62 +373,61 @@ describe('project distribution build contract', () => {
     );
   });
 
-  it('keeps the checked-in zxjt registration and distribution manifest example resolvable together', () => {
-    const projectRoot = resolvePath(__dirname, '../../../..');
-    const registry = JSON.parse(readFileSync(resolvePath(projectRoot, 'distributions/registry.json'), 'utf8'));
-    const manifest = JSON.parse(
-      readFileSync(resolvePath(projectRoot, 'distributions/examples/zxjt.manifest.json'), 'utf8')
-    );
-    const branchManifest = JSON.parse(readFileSync(resolvePath(projectRoot, 'distribution-manifest.json'), 'utf8'));
-    const deliveryRecords = JSON.parse(
-      readFileSync(resolvePath(projectRoot, 'distributions/delivery-records.json'), 'utf8')
-    );
+  it.each(['distributions/examples/zxjt.manifest.json', 'distribution-manifest.json'])(
+    'resolves the checked-in zxjt %s against its registration',
+    (manifestPath) => {
+      const projectRoot = resolvePath(__dirname, '../../../..');
+      const registry = JSON.parse(readFileSync(resolvePath(projectRoot, 'distributions/registry.json'), 'utf8'));
+      const manifest = JSON.parse(readFileSync(resolvePath(projectRoot, manifestPath), 'utf8'));
+      const deliveryRecords = JSON.parse(
+        readFileSync(resolvePath(projectRoot, 'distributions/delivery-records.json'), 'utf8')
+      );
 
-    expect(branchManifest).toEqual(manifest);
-    expect(manifest).toMatchObject({
-      schemaVersion: 2,
-      platforms: {
-        preview: ['macos-arm64'],
-        formal: ['windows-x64', 'windows-arm64'],
-      },
-    });
-    expect(registry.registrations[0].allowed).toMatchObject({
-      platforms: {
-        preview: ['macos-arm64'],
-        formal: ['windows-x64', 'windows-arm64'],
-      },
-      requiredPlatforms: {
-        preview: ['macos-arm64'],
-        formal: ['windows-x64', 'windows-arm64'],
-      },
-    });
-
-    expect(resolve({ registry, manifest, requestedPlatforms: ['macos-arm64'] })).toMatchObject({
-      distributionId: 'zxjt',
-      identityMode: 'local',
-      platforms: ['macos-arm64'],
-      packagingIdentity: {
-        desktop: {
-          appId: 'com.xlihub.ki-buddy.zxjt.preview',
-          productName: 'Ki-Buddy',
+      expect(manifest).toMatchObject({
+        schemaVersion: 2,
+        platforms: {
+          preview: ['macos-arm64'],
+          formal: ['windows-x64', 'windows-arm64'],
         },
-      },
-    });
-    expect(() =>
-      execFileSync('git', ['merge-base', '--is-ancestor', manifest.baseline.commit, 'HEAD'], {
-        cwd: projectRoot,
-        stdio: 'ignore',
-      })
-    ).not.toThrow();
-    expect(
-      resolveFormal({
-        registry,
-        manifest,
-        deliveryRecords,
-        requestedPlatforms: ['windows-x64', 'windows-arm64'],
-      }).deliveryHistory.deliveredVersions
-    ).toEqual([]);
-  });
+      });
+      expect(registry.registrations[0].allowed).toMatchObject({
+        platforms: {
+          preview: ['macos-arm64'],
+          formal: ['windows-x64', 'windows-arm64'],
+        },
+        requiredPlatforms: {
+          preview: ['macos-arm64'],
+          formal: ['windows-x64', 'windows-arm64'],
+        },
+      });
+
+      expect(resolve({ registry, manifest, requestedPlatforms: ['macos-arm64'] })).toMatchObject({
+        distributionId: 'zxjt',
+        identityMode: 'local',
+        platforms: ['macos-arm64'],
+        packagingIdentity: {
+          desktop: {
+            appId: 'com.xlihub.ki-buddy.zxjt.preview',
+            productName: 'Ki-Buddy',
+          },
+        },
+      });
+      expect(() =>
+        execFileSync('git', ['merge-base', '--is-ancestor', manifest.baseline.commit, 'HEAD'], {
+          cwd: projectRoot,
+          stdio: 'ignore',
+        })
+      ).not.toThrow();
+      expect(
+        resolveFormal({
+          registry,
+          manifest,
+          deliveryRecords,
+          requestedPlatforms: ['windows-x64', 'windows-arm64'],
+        }).deliveryHistory.deliveredVersions
+      ).toEqual([]);
+    }
+  );
 
   it('keeps delivery record schema platforms and checksums aligned with the supported project build matrix', () => {
     const projectRoot = resolvePath(__dirname, '../../../..');
