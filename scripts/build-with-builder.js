@@ -708,6 +708,16 @@ try {
     throw new Error('KI_BUDDY_RESOLVED_BUILD_PLAN must contain a validated project build plan');
   }
   const buildVersionOverride = projectBuildPlan?.version ?? getBuildVersionOverride();
+  const currentPlatform =
+    builderArgs.includes('--mac') || process.platform === 'darwin'
+      ? 'macos'
+      : builderArgs.includes('--win') || process.platform === 'win32'
+        ? 'windows'
+        : 'linux';
+  const projectPlatform = projectBuildPlan ? `${currentPlatform}-${targetArch}` : null;
+  if (projectBuildPlan && !projectBuildPlan.platforms.includes(projectPlatform)) {
+    throw new Error(`Resolved project build plan does not select ${projectPlatform}`);
+  }
 
   // 1. Ensure package.json main entry is correct for electron-vite
   const packageJson = JSON.parse(fs.readFileSync(packageJsonPath, 'utf8'));
@@ -780,6 +790,7 @@ try {
   const productConfig = readProductConfig(projectRoot);
   if (projectBuildPlan) {
     const plannedKiCore = projectBuildPlan.kiCore;
+    const plannedChecksum = plannedKiCore.checksums?.[projectPlatform];
     if (plannedKiCore.sourcePolicy === 'release-pinned') {
       const productPin = readKiCorePin(projectRoot);
       const plannedPin = {
@@ -787,14 +798,14 @@ try {
         tag: plannedKiCore.tag,
         commit: plannedKiCore.commit,
         aionCore: plannedKiCore.aionCore,
-        checksum: plannedKiCore.checksum,
+        checksum: plannedChecksum,
       };
       const selectedProductPin = {
         repository: productPin.repository,
         tag: productPin.tag,
         commit: productPin.commit,
         aionCore: productPin.aionCore,
-        checksum: productPin.checksums[plannedKiCore.platform],
+        checksum: productPin.checksums[projectPlatform],
       };
       if (JSON.stringify(plannedPin) !== JSON.stringify(selectedProductPin)) {
         throw new Error('Resolved project build plan Ki-Core provenance does not match the product pin');
@@ -802,7 +813,9 @@ try {
     } else if (
       plannedKiCore.sourcePolicy !== 'candidate' ||
       process.env.AIONUI_BACKEND_RUN_ID !== String(plannedKiCore.candidate?.runId) ||
-      process.env.AIONUI_BACKEND_EXPECTED_SHA !== plannedKiCore.commit
+      process.env.AIONUI_BACKEND_EXPECTED_SHA !== plannedKiCore.commit ||
+      plannedKiCore.candidate?.artifacts?.[projectPlatform] !== `ki-core-candidate-${projectPlatform}` ||
+      !plannedChecksum
     ) {
       throw new Error('Resolved project build plan Ki-Core candidate does not match the requested artifact');
     }

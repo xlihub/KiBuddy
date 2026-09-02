@@ -64,6 +64,7 @@ export default defineConfig({
       include: [
         'packages/desktop/src/**/*.{ts,tsx}',
         'packages/**/src/**/*.{ts,tsx}',
+        'packages/shared-scripts/src/artifactFiles.js',
         'packages/shared-scripts/src/kiBuddyPackagingIdentity.js',
       ],
       exclude: [

@@ -1,5 +1,5 @@
 {
-  "schemaVersion": 1,
+  "schemaVersion": 2,
   "distributionId": "zxjt",
   "version": "0.1.0",
   "baseline": {
@@ -20,5 +20,8 @@
     "ico": "resources/ki-buddy/app.ico",
     "icns": "resources/ki-buddy/app.icns"
   },
-  "platforms": ["macos-arm64"]
+  "platforms": {
+    "preview": ["macos-arm64"],
+    "formal": ["windows-x64", "windows-arm64"]
+  }
 }

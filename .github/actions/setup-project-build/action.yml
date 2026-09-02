@@ -1,0 +1,115 @@
+name: Set up project package build
+description: Prepare trusted platform dependencies before building a registered project package.
+
+inputs:
+  platform:
+    description: Canonical project platform identifier.
+    required: true
+  arch:
+    description: electron-builder target architecture.
+    required: true
+  source-directory:
+    description: Absolute path to the checked-out project source.
+    required: true
+
+runs:
+  using: composite
+  steps:
+    - name: Set up Node.js
+      uses: actions/setup-node@v4
+      with:
+        node-version: '22'
+
+    - name: Set up Bun
+      uses: oven-sh/setup-bun@v2
+      with:
+        bun-version: latest
+
+    - name: Set up Python
+      uses: actions/setup-python@v5
+      with:
+        python-version: '3.12'
+
+    - name: Install Linux system dependencies
+      if: startsWith(inputs.platform, 'linux')
+      shell: bash
+      run: |
+        sudo apt-get update
+        sudo apt-get install -y build-essential python3 python3-pip pkg-config libsqlite3-dev fakeroot dpkg-dev rpm libnss3-dev libatk-bridge2.0-dev libdrm2 libxkbcommon-dev libxss1 libatspi2.0-dev libgtk-3-dev libxrandr2 libasound2-dev
+
+    - name: Set up Windows native build environment
+      if: startsWith(inputs.platform, 'windows')
+      shell: pwsh
+      run: |
+        bun install --global node-gyp
+        "WindowsTargetPlatformVersion=10.0.19041.0" | Out-File -FilePath $env:GITHUB_ENV -Append
+
+    - name: Install MSVC ARM64 toolchain
+      if: inputs.platform == 'windows-arm64'
+      uses: nick-fields/retry@v3
+      with:
+        timeout_minutes: 20
+        max_attempts: 3
+        retry_wait_seconds: 60
+        shell: pwsh
+        command: >-
+          choco install visualstudio2022buildtools --yes --params
+          "'--add Microsoft.VisualStudio.Component.VC.Tools.ARM64
+          --add Microsoft.VisualStudio.Component.Windows11SDK.22000
+          --includeRecommended --includeOptional'"
+
+    - name: Set up MSBuild
+      if: startsWith(inputs.platform, 'windows')
+      uses: microsoft/setup-msbuild@v2
+      with:
+        vs-version: '17.0'
+
+    - name: Install project dependencies
+      shell: bash
+      working-directory: ${{ inputs.source-directory }}
+      run: bun install --frozen-lockfile
+
+    - name: Run project postinstall
+      shell: bash
+      working-directory: ${{ inputs.source-directory }}
+      run: bun run postinstall
+
+    - name: Rebuild native modules for Electron
+      if: ${{ !startsWith(inputs.platform, 'windows') }}
+      shell: bash
+      working-directory: ${{ inputs.source-directory }}
+      run: |
+        case "${{ inputs.platform }}" in
+          macos-*) target_platform=darwin ;;
+          linux-*) target_platform=linux ;;
+          *) echo "Unsupported native module target: ${{ inputs.platform }}" >&2; exit 1 ;;
+        esac
+        bunx electron-builder install-app-deps --platform "$target_platform" --arch "${{ inputs.arch }}"
+      env:
+        npm_config_runtime: electron
+        npm_config_arch: ${{ inputs.arch }}
+        npm_config_target_arch: ${{ inputs.arch }}
+        npm_config_disturl: https://electronjs.org/headers
+
+    - name: Rebuild Windows native modules for Electron
+      if: startsWith(inputs.platform, 'windows')
+      shell: pwsh
+      working-directory: ${{ inputs.source-directory }}
+      run: |
+        $ErrorActionPreference = 'Stop'
+        bunx electron-builder install-app-deps --platform win32 --arch "${{ inputs.arch }}"
+        if ($LASTEXITCODE -ne 0) {
+          exit $LASTEXITCODE
+        }
+        $sqliteNode = 'node_modules/better-sqlite3/build/Release/better_sqlite3.node'
+        if (-not (Test-Path -LiteralPath $sqliteNode)) {
+          Write-Error "better-sqlite3 native module was not rebuilt: $sqliteNode"
+          exit 1
+        }
+      env:
+        npm_config_runtime: electron
+        npm_config_arch: ${{ inputs.arch }}
+        npm_config_target_arch: ${{ inputs.arch }}
+        npm_config_disturl: https://electronjs.org/headers
+        MSVS_VERSION: 2022
+        GYP_MSVS_VERSION: 2022
