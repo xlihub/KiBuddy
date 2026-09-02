@@ -273,12 +273,15 @@ function materializeKiBuddyInstaller(installerPath, platform, packagingIdentity,
     }
     if (uninstallPath) {
       try {
-        execute(uninstallPath, ['/S'], { stdio: ['ignore', 'ignore', 'ignore'] });
+        execute(uninstallPath, ['/S', `_?=${path.dirname(uninstallPath)}`], {
+          windowsVerbatimArguments: true,
+          stdio: ['ignore', 'ignore', 'ignore'],
+        });
       } catch {
         // Verification already completed; removal of the ephemeral install directory still continues.
       }
     }
-    fs.rmSync(tempRoot, { recursive: true, force: true });
+    fs.rmSync(tempRoot, { recursive: true, force: true, maxRetries: 5, retryDelay: 200 });
   };
   try {
     if (platform.startsWith('macos-')) {
@@ -291,7 +294,10 @@ function materializeKiBuddyInstaller(installerPath, platform, packagingIdentity,
     }
     if (platform.startsWith('windows-')) {
       const installPath = path.join(tempRoot, 'installed');
-      execute(installerPath, ['/S', `/D=${installPath}`], { stdio: ['ignore', 'ignore', 'pipe'] });
+      execute(installerPath, ['/S', `/D=${installPath}`], {
+        windowsVerbatimArguments: true,
+        stdio: ['ignore', 'ignore', 'pipe'],
+      });
       if (!fs.statSync(installPath, { throwIfNoEntry: false })?.isDirectory()) {
         throw new Error('Windows installer did not create the requested installation directory');
       }
