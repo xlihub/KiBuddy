@@ -1,5 +1,6 @@
 import {
   copyFileSync,
+  cpSync,
   existsSync,
   mkdirSync,
   mkdtempSync,
@@ -345,6 +346,33 @@ function createMacFixture(expectedIdentity, bundleIdentifier: string, expectedBu
 }
 
 describe('Ki-Buddy unpacked product verification', () => {
+  it('runs artifact validation without installing build-only dependencies', () => {
+    const isolatedRoot = mkdtempSync(join(tmpdir(), 'ki-buddy-verifier-dependencies-'));
+    try {
+      const scripts = 'packages/shared-scripts/src';
+      cpSync(join(projectRoot, scripts), join(isolatedRoot, scripts), { recursive: true });
+      const registry = 'packages/desktop/src/common/platform/ki-buddy/experience/registry.json';
+      mkdirSync(dirname(join(isolatedRoot, registry)), { recursive: true });
+      copyFileSync(join(projectRoot, registry), join(isolatedRoot, registry));
+      copyFileSync(join(projectRoot, 'ki-buddy-product.json'), join(isolatedRoot, 'ki-buddy-product.json'));
+
+      const output = execFileSync(
+        process.execPath,
+        [
+          '-e',
+          `const { verifyKiBuddyUnpacked } = require('./packages/shared-scripts/src/kiBuddyUnpacked');
+           try { verifyKiBuddyUnpacked(process.cwd(), 'missing-application', 'win32'); }
+           catch (error) { process.stdout.write(error.message); }`,
+        ],
+        { cwd: isolatedRoot, env: { ...process.env, NODE_PATH: '' }, encoding: 'utf8', stdio: 'pipe' }
+      );
+
+      expect(output).toContain('win32 packaged executable is missing:');
+    } finally {
+      rmSync(isolatedRoot, { recursive: true, force: true });
+    }
+  });
+
   it('materializes a Linux application from the installer payload', () => {
     const identity = createProjectPackagingOverlay();
     const tempRoot = mkdtempSync(join(tmpdir(), 'ki-buddy-installer-test-'));

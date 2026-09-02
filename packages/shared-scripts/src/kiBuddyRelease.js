@@ -3,7 +3,6 @@ const fs = require('node:fs');
 const path = require('node:path');
 const { execFileSync } = require('node:child_process');
 const { isDeepStrictEqual } = require('node:util');
-const yaml = require('js-yaml');
 const { readKiCorePin } = require('./kiCoreRelease');
 const { resolveKiBuddyPackagingIdentity } = require('./kiBuddyPackagingIdentity');
 const productExperienceRegistry = require('../../desktop/src/common/platform/ki-buddy/experience/registry.json');
@@ -565,6 +564,7 @@ function createEffectivePackageJson(projectRoot, options = {}) {
  * @returns {object} Generated electron-builder configuration.
  */
 function createElectronBuilderConfig(projectRoot, outputPath, options = {}) {
+  const yaml = require('js-yaml');
   const productConfig = readProductConfig(projectRoot);
   const packagingIdentity = resolveKiBuddyPackagingIdentity(productConfig, options.packagingOverlay);
   for (const [kind, relativePath] of Object.entries(packagingIdentity.resources.platform)) {
