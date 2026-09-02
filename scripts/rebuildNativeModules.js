@@ -235,11 +235,14 @@ function rebuildSingleModule(options) {
   if (!forceRebuild || mustUsePrebuild) {
     try {
       env.npm_config_build_from_source = 'false';
+      // N-API packages publish ABI-stable assets rather than Electron-version assets.
+      const modulePackage = JSON.parse(fs.readFileSync(path.join(moduleRoot, 'package.json'), 'utf8'));
+      const napiTarget = modulePackage.config?.runtime === 'napi' ? modulePackage.config.target : null;
       const prebuildArgs = [
         '--yes',
         'prebuild-install',
-        '--runtime=electron',
-        `--target=${electronVersion}`,
+        `--runtime=${napiTarget ? 'napi' : 'electron'}`,
+        `--target=${napiTarget || electronVersion}`,
         `--platform=${platform}`,
         `--arch=${targetArch}`,
         '--force',
@@ -389,6 +392,10 @@ function verifyModuleBinary(moduleRoot, moduleName) {
 }
 
 module.exports = {
+  beforePack,
+  hasKeytarDependency,
+  verifyKeytarBinary,
+  verifyPackagedKeytar,
   normalizeArch,
   getModulesToRebuild,
   buildEnvironment,
@@ -400,3 +407,72 @@ module.exports = {
   getBunxCommand,
   getCommandPrefix,
 };
+
+/** Checks whether the application declares the credential module as a runtime dependency. */
+function hasKeytarDependency(appDir) {
+  const metadata = JSON.parse(fs.readFileSync(path.join(appDir, 'package.json'), 'utf8'));
+  return Boolean(metadata.dependencies?.keytar);
+}
+
+/** Verifies the exact path required by keytar, including its macOS target architecture. */
+function verifyKeytarBinary(moduleRoot, platform, arch) {
+  const binaryPath = path.join(moduleRoot, 'build', 'Release', 'keytar.node');
+  if (!fs.statSync(binaryPath, { throwIfNoEntry: false })?.isFile()) {
+    throw new Error(`Missing required keytar binary: ${binaryPath}`);
+  }
+  if (platform === 'darwin') {
+    const architectures = execFileSync('lipo', ['-archs', binaryPath], { encoding: 'utf8' }).trim().split(/\s+/);
+    const expectedArchitecture = arch === 'x64' ? 'x86_64' : arch;
+    if (!architectures.includes(expectedArchitecture)) {
+      throw new Error(`keytar binary must support ${arch}, found ${architectures.join(', ')}: ${binaryPath}`);
+    }
+  }
+}
+
+/** Verifies that Electron can locate the unpacked credential binary through the ASAR index. */
+function verifyPackagedKeytar(resourcesDir, platform, arch) {
+  const moduleRoot = path.join(resourcesDir, 'app.asar.unpacked', 'node_modules', 'keytar');
+  verifyKeytarBinary(moduleRoot, platform, arch);
+
+  const archivePath = path.join(resourcesDir, 'app.asar');
+  // ASAR lookup splits paths using the host separator, including backslashes on Windows.
+  const binaryPath = path.join('node_modules', 'keytar', 'build', 'Release', 'keytar.node');
+  const asar = require(
+    require.resolve('@electron/asar', { paths: [path.dirname(require.resolve('electron-builder'))] })
+  );
+  try {
+    // Each packaging attempt can replace the archive at the same path.
+    asar.uncache(archivePath);
+    const entry = asar.statFile(archivePath, binaryPath);
+    // macOS signing can change the unpacked binary size after ASAR creation.
+    if (entry.unpacked !== true) {
+      throw new Error('ASAR entry must be unpacked');
+    }
+  } catch (error) {
+    throw new Error(`Invalid packaged keytar ASAR entry: ${archivePath}: ${error.message}`, { cause: error });
+  }
+}
+
+/** Prepares credentials before ASAR records its file index, even on same-architecture builds. */
+async function beforePack(context) {
+  const { Arch } = require('builder-util');
+  const { packager, electronPlatformName, arch } = context;
+  const appDir = packager.info.appDir;
+  if (!hasKeytarDependency(appDir)) return;
+
+  const targetArch = normalizeArch(typeof arch === 'string' ? arch : Arch[arch]);
+  const moduleRoot = path.join(appDir, 'node_modules', 'keytar');
+  if (!fs.existsSync(path.join(moduleRoot, 'package.json'))) {
+    throw new Error(`Required keytar dependency is not installed: ${moduleRoot}`);
+  }
+  const success = rebuildSingleModule({
+    moduleName: 'keytar',
+    moduleRoot,
+    platform: electronPlatformName,
+    arch: targetArch,
+    electronVersion: packager.info.electronVersion,
+    projectRoot: appDir,
+  });
+  if (!success) throw new Error(`Failed to prepare keytar for ${electronPlatformName}-${targetArch}`);
+  verifyKeytarBinary(moduleRoot, electronPlatformName, targetArch);
+}

@@ -7,6 +7,8 @@ const {
   rebuildSingleModule,
   verifyModuleBinary,
   getModulesToRebuild,
+  hasKeytarDependency,
+  verifyPackagedKeytar,
 } = require('./rebuildNativeModules');
 const { verifyBundledAioncoreResources } = require('../packages/shared-scripts/src/verify-bundled-aioncore-resources');
 
@@ -77,6 +79,11 @@ module.exports = async function afterPack(context) {
     throw new Error(`resources directory not found: ${resourcesDir}`);
   }
 
+  const appDir = packager?.info?.appDir ?? path.resolve(__dirname, '..');
+  if (hasKeytarDependency(appDir)) {
+    verifyPackagedKeytar(resourcesDir, electronPlatformName, targetArch);
+  }
+
   if (!isCrossCompile && !needsSameArchRebuild && !forceRebuild) {
     console.log(`   ✓ Same architecture, rebuild skipped (set FORCE_NATIVE_REBUILD=true to override)\n`);
     return;
@@ -108,7 +115,8 @@ module.exports = async function afterPack(context) {
 
   // Modules that need to be rebuilt for cross-compilation
   // Use platform-specific module list (Windows skips node-pty due to cross-compilation issues)
-  const modulesToRebuild = getModulesToRebuild(electronPlatformName);
+  // keytar is prepared before ASAR creation; never delete its already indexed binary here.
+  const modulesToRebuild = getModulesToRebuild(electronPlatformName).filter((moduleName) => moduleName !== 'keytar');
   console.log(`   Modules to rebuild: ${modulesToRebuild.join(', ')}`);
 
   // For cross-compilation, clean up build artifacts from the wrong architecture
