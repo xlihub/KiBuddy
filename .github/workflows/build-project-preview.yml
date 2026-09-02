@@ -126,6 +126,7 @@ jobs:
       fail-fast: false
       matrix: ${{ fromJSON(needs.validate.outputs.matrix) }}
     env:
+      NODE_OPTIONS: '--max-old-space-size=8192'
       KI_BUDDY_RESOLVED_BUILD_PLAN: ${{ github.workspace }}/validated/project-build-plan.json
       AIONUI_BACKEND_SOURCE_POLICY: release-pinned
     steps:
@@ -415,6 +416,7 @@ jobs:
       fail-fast: false
       matrix: ${{ fromJSON(needs.formal_validate.outputs.matrix) }}
     env:
+      NODE_OPTIONS: '--max-old-space-size=8192'
       KI_BUDDY_RESOLVED_BUILD_PLAN: ${{ github.workspace }}/validated/project-build-plan.json
       AIONUI_BACKEND_SOURCE_POLICY: ${{ inputs.ki_core_source_policy }}
       AIONUI_BACKEND_RUN_ID: ${{ inputs.ki_core_candidate_run_id }}
