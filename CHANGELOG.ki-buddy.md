@@ -16,7 +16,7 @@
 
 ### Ki-Core 更新
 
-- 继续固定 [Ki-Core 0.1.4](https://github.com/xlihub/Ki-Core/releases/tag/ki-core-v0.1.4)，release commit `3c4055eb65b7b9d1f2f80ce6008bdf1dae9469cc`。
+- 固定 [Ki-Core 0.1.5](https://github.com/xlihub/Ki-Core/releases/tag/ki-core-v0.1.5)，release commit `d0fddf5ffcee9cacaebde05e2914beac27f93a2a`；采用 Ki-Model 0.1.1 的自定义网关、手动模型和连接选项契约，并包含并发凭据更新修复。
 - Ki-Core 继续对应 [AionCore v0.1.72](https://github.com/iOfficeAI/AionCore/releases/tag/v0.1.72)，peeled commit `57a34cc1b1a3b17bcc023de06b9e6768fceac36f`。
 
 ## [0.1.7] - 2026-08-27

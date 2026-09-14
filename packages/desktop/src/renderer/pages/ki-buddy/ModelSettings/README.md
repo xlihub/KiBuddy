@@ -4,7 +4,7 @@
 
 ## 已核对的契约
 
-- Ki-Core：`github-history/feat/openai-connection-options`，`99387e444746bfe95f8adcb816fd2ab44513d21d`，`crates/aionui-api-types/src/provider_gateway.rs`、`provider.rs` 与 `crates/aionui-system/src/provider_gateway.rs`。
+- Ki-Core：正式版 [`ki-core-v0.1.5`](https://github.com/xlihub/Ki-Core/releases/tag/ki-core-v0.1.5)，`d0fddf5ffcee9cacaebde05e2914beac27f93a2a`，`crates/aionui-api-types/src/provider_gateway.rs`、`provider.rs` 与 `crates/aionui-system/src/provider_gateway.rs`。
 - Ki-Model：`ki-model-v0.1.1` / `6e9a710738fac4e76d03d936c0c69d26cec96157`。Core 统一构建 SDK OpenAIProvider；桌面不解析模型协议或 SSE。
 - 保存沿用既有 provider API 和认证 IPC。`model_mode=manual`、`is_full_url=true`、完整地址与请求模型 ID 原样保留，固定 Chat Completions。三个弹窗在手动模式停止发现、协议探测和地址修正。Bearer、代理及 stream_options 的 Select 使用普通容器与 aria-label，避免外层 label 额外触发点击而使下拉立即关闭；回归测试通过显示值和可交互选项进行真实点击。
 - `gateway` 为整体替换；更新缺省/null 保留。回到自动配置显式发送 `model_mode=automatic`，已有网关通过 `clear_gateway=true` 清除，使用自动表单填写的 API Key。若已存请求头凭据，切换开关不会直接授权删除；必须点击独立的确认清除操作后才能保存。
@@ -39,7 +39,7 @@
 KI_BUDDY_CORE_BINARY=/absolute/path/to/aioncore bun run test -- tests/unit/renderer/components/settings/KiBuddyModelSettings/coreIntegration.dom.test.tsx
 ```
 
-离线验证不代表客户网络、Windows 安装或正式交付验收。此功能分支的本地源码包可以采用 development/local-binary 来源；正式产品 pin、candidate、发布和交付记录按已有发布流程另行处理，不伪造 provenance。
+离线验证不代表客户网络、Windows 安装或正式交付验收。当前功能固定 Ki-Core 0.1.5 的正式 Release、提交和六平台 SHA-256，构建采用 release-pinned 来源。此前使用的 development/local-binary 包只代表当时的分支验证；新验证必须使用 0.1.5 资产。Ki-Buddy 发布和项目交付仍按已有流程另行处理。
 
 ## 本次变更分类
 
