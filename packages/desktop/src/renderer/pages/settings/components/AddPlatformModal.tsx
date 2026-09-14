@@ -1,3 +1,4 @@
+import { useKiBuddyModelSettings } from '@/renderer/pages/ki-buddy/ModelSettings';
 import type { IProvider } from '@/common/config/storage';
 import {
   type ModelImageInputChoice,
@@ -233,7 +234,9 @@ const AddPlatformModal = ModalHOC<{
   const [modelProtocol, setModelProtocol] = useState<string>('openai');
   const [imageInput, setImageInput] = useState<ModelImageInputChoice>('auto');
   const [openAiApiMode, setOpenAiApiMode] = useState<ModelOpenAiApiModeChoice>('auto');
-  const [isFullUrl, setIsFullUrl] = useState(false);
+  const modelSettings = useKiBuddyModelSettings({ platform, visible: modalProps.visible });
+  const [fullUrlInput, setIsFullUrl] = useState(false);
+  const isFullUrl = modelSettings.forceFullUrl || fullUrlInput;
   const showOpenAiApiMode = supportsOpenAiApiMode(platform, modelProtocol);
 
   // Auto-detect protocol when model changes (for new-api platforms). The model
@@ -254,7 +257,14 @@ const AddPlatformModal = ModalHOC<{
 
   // For Bedrock, don't pass bedrock_config to avoid auto-refresh on input changes
   // We'll build it dynamically in onFocus
-  const modelListState = useModeModeList(platform, actualBaseUrl, api_key, true, undefined);
+  const modelListState = useModeModeList(
+    platform,
+    actualBaseUrl,
+    api_key,
+    true,
+    undefined,
+    modelSettings.discoveryEnabled
+  );
 
   // 协议检测 Hook / Protocol detection hook
   // 启用检测的条件：
@@ -264,7 +274,7 @@ const AddPlatformModal = ModalHOC<{
   // 1. Custom platform OR user entered a custom base URL (non-official, like local proxy)
   // 2. Input values differ from last "accepted suggestion" (avoid redundant detection after platform switch)
   const isNonOfficialBaseUrl = base_url && !isGoogleApisHost(base_url);
-  const shouldEnableDetection = isCustom || isNonOfficialBaseUrl;
+  const shouldEnableDetection = modelSettings.discoveryEnabled && (isCustom || isNonOfficialBaseUrl);
   // 只有在用户修改了输入值（相对于上次采纳建议时）才触发检测
   // Only trigger detection when input changed since last accepted suggestion
   const inputChangedSinceLastSwitch =
@@ -331,11 +341,11 @@ const AddPlatformModal = ModalHOC<{
 
   // 处理自动修复的 base_url / Handle auto-fixed base_url
   useEffect(() => {
-    if (modelListState.data?.fix_base_url) {
+    if (modelSettings.discoveryEnabled && modelListState.data?.fix_base_url) {
       form.setFieldValue('base_url', modelListState.data.fix_base_url);
       message.info(t('settings.baseUrlAutoFix', { base_url: modelListState.data.fix_base_url }));
     }
-  }, [modelListState.data?.fix_base_url, form]);
+  }, [modelListState.data?.fix_base_url, form, modelSettings.discoveryEnabled]);
 
   const handleSubmit = () => {
     form
@@ -393,7 +403,9 @@ const AddPlatformModal = ModalHOC<{
           showOpenAiApiMode ? openAiApiMode : 'auto'
         );
 
-        onSubmit(provider);
+        const prepared = modelSettings.prepare(provider);
+        if (!prepared) return;
+        onSubmit(prepared);
         modalCtrl.close();
       })
       .catch(() => {
@@ -464,6 +476,8 @@ const AddPlatformModal = ModalHOC<{
             </Select>
           </Form.Item>
 
+          {modelSettings.fields}
+
           {/* Base URL - shown for every platform (except Bedrock) so users can
               see and edit the endpoint. Preset platforms are prefilled with their
               default URL and offer a reset button to restore it. */}
@@ -513,7 +527,7 @@ const AddPlatformModal = ModalHOC<{
             A negative marginTop would overlap the Input's bottom edge and
             intercept clicks on its lower rim (see ELECTRON-1K4).
           */}
-          {(isCustom || isNewApi) && !isBedrock && (
+          {(isCustom || isNewApi) && !isBedrock && !modelSettings.forceFullUrl && (
             <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginTop: 4, marginBottom: 12 }}>
               <Switch size='small' checked={isFullUrl} onChange={setIsFullUrl} />
               <span className='text-12px text-t-secondary'>{t('settings.fullUrlMode', '完整 URL')}</span>
@@ -755,7 +769,7 @@ const AddPlatformModal = ModalHOC<{
             />
           </Form.Item>
 
-          {showOpenAiApiMode && (
+          {showOpenAiApiMode && !modelSettings.forceChatCompletions && (
             <Form.Item label={t('settings.openAiApiMode')} extra={t('settings.openAiApiModeTip')}>
               <Select
                 value={openAiApiMode}

@@ -1418,5 +1418,25 @@
   "crossSessionMessageDesc": "Permet aux agents d'envoyer des messages à vos autres conversations. La désactivation coupe aussi la mention @@ dans la zone de saisie.",
   "crossSessionMessageDisabledBanner": "Les messages entre conversations sont désactivés, la mention @@ est indisponible.",
   "crossSessionMessageResume": "Réactiver",
-  "crossSessionMessageUpdateFailed": "Échec de la mise à jour du réglage des messages entre conversations"
+  "crossSessionMessageUpdateFailed": "Échec de la mise à jour du réglage des messages entre conversations",
+  "kiBuddyModel": {
+    "manual": "Configurer le modèle manuellement",
+    "manualHint": "Saisissez une URL de chat complète et un ID de modèle de requête. Le mode manuel utilise Chat Completions sans découverte de modèles, détection de protocole ni correction de l’URL.",
+    "advanced": "Paramètres avancés de passerelle",
+    "advancedHint": "Ces options concernent uniquement cette connexion avec Chat Completions. Les valeurs par défaut préservent le comportement existant.",
+    "bearer": "Envoyer l’authentification Bearer (API Key)",
+    "proxy": "Proxy",
+    "systemProxy": "Proxy système",
+    "direct": "Connexion directe",
+    "timeout": "Délai d’attente (secondes)",
+    "streamOptions": "Envoyer stream_options",
+    "inherit": "Utiliser la valeur par défaut",
+    "enabled": "Activé",
+    "disabled": "Désactivé",
+    "urlRequired": "Saisissez une URL de chat HTTP ou HTTPS complète.",
+    "modelRequired": "Saisissez au moins un ID de modèle de requête non vide.",
+    "timeoutInvalid": "Le délai doit être un nombre entier positif de secondes.",
+    "unavailable": "Cette version de Core ne permet pas encore d’enregistrer ces paramètres manuels ou de passerelle. Les modifications ne sont pas enregistrées.",
+    "mappingFailed": "Impossible de préparer les paramètres de connexion. Les modifications ne sont pas enregistrées."
+  }
 }

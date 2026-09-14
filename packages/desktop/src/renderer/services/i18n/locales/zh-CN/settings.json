@@ -1419,5 +1419,25 @@
   "crossSessionMessageDesc": "允许 Agent 向你的其他会话发送消息。关闭后，输入框的 @@ 会话提及与投递能力同时停用。",
   "crossSessionMessageDisabledBanner": "跨会话消息已关闭，输入框的 @@ 会话提及不可用。",
   "crossSessionMessageResume": "重新开启",
-  "crossSessionMessageUpdateFailed": "跨会话消息设置更新失败"
+  "crossSessionMessageUpdateFailed": "跨会话消息设置更新失败",
+  "kiBuddyModel": {
+    "manual": "手动配置模型",
+    "manualHint": "请输入完整聊天地址和请求模型 ID。手动模式使用 Chat Completions，不发现模型、不探测协议、不自动修正地址。",
+    "advanced": "高级网关设置",
+    "advancedHint": "可选设置仅作用于当前连接，使用 Chat Completions。保持默认可沿用原有连接行为。",
+    "bearer": "附带 Bearer 鉴权（API Key）",
+    "proxy": "代理方式",
+    "systemProxy": "系统代理",
+    "direct": "直连",
+    "timeout": "超时（秒）",
+    "streamOptions": "发送 stream_options",
+    "inherit": "使用默认设置",
+    "enabled": "开启",
+    "disabled": "关闭",
+    "urlRequired": "请输入完整的 HTTP 或 HTTPS 聊天地址。",
+    "modelRequired": "请至少填写一个非空的请求模型 ID。",
+    "timeoutInvalid": "超时必须为正整数，单位为秒。",
+    "unavailable": "当前 Core 暂不支持保存手动模式或网关设置，本次修改尚未保存。",
+    "mappingFailed": "无法准备连接配置，本次修改尚未保存。"
+  }
 }

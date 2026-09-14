@@ -1418,5 +1418,25 @@
   "crossSessionMessageDesc": "Let agents send messages to your other conversations. Turning this off also disables the @@ conversation mention in the input box.",
   "crossSessionMessageDisabledBanner": "Cross-conversation messages are off, so the @@ conversation mention is unavailable.",
   "crossSessionMessageResume": "Turn back on",
-  "crossSessionMessageUpdateFailed": "Failed to update the cross-conversation message setting"
+  "crossSessionMessageUpdateFailed": "Failed to update the cross-conversation message setting",
+  "kiBuddyModel": {
+    "manual": "Manual model setup",
+    "manualHint": "Enter a complete chat URL and request model ID. Manual mode uses Chat Completions without model discovery, protocol detection, or URL correction.",
+    "advanced": "Advanced gateway settings",
+    "advancedHint": "Optional settings apply only to this connection and use Chat Completions. Defaults preserve the existing connection behavior.",
+    "bearer": "Send Bearer authorization (API Key)",
+    "proxy": "Proxy",
+    "systemProxy": "System proxy",
+    "direct": "Direct connection",
+    "timeout": "Timeout (seconds)",
+    "streamOptions": "Send stream_options",
+    "inherit": "Use default",
+    "enabled": "Enabled",
+    "disabled": "Disabled",
+    "urlRequired": "Enter a complete HTTP or HTTPS chat URL.",
+    "modelRequired": "Enter at least one non-empty request model ID.",
+    "timeoutInvalid": "Timeout must be a positive whole number of seconds.",
+    "unavailable": "This Core version cannot save manual or gateway settings yet. Your changes have not been saved.",
+    "mappingFailed": "Could not prepare the connection settings. Your changes have not been saved."
+  }
 }

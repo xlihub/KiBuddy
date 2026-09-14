@@ -1,3 +1,4 @@
+import { useKiBuddyModelSettings } from '@/renderer/pages/ki-buddy/ModelSettings';
 import type { IProvider } from '@/common/config/storage';
 import {
   type ModelImageInputChoice,
@@ -27,7 +28,20 @@ const AddModelModal = ModalHOC<{ data?: IProvider; model?: string; onSubmit: (mo
     const [openAiApiMode, setOpenAiApiMode] = useState<ModelOpenAiApiModeChoice>('auto');
     const isNewApi = isNewApiPlatform(data?.platform ?? '');
     const isEditing = Boolean(editingModel);
-    const { data: modelList, isLoading } = useModeModeList(data?.platform, data?.base_url, data?.api_key);
+    const modelSettings = useKiBuddyModelSettings({
+      platform: data?.platform,
+      provider: data,
+      visible: modalProps.visible,
+      editable: false,
+    });
+    const { data: modelList, isLoading } = useModeModeList(
+      data?.platform,
+      data?.base_url,
+      data?.api_key,
+      undefined,
+      undefined,
+      modelSettings.discoveryEnabled
+    );
     const existingModels = data?.models || [];
     const showOpenAiApiMode = supportsOpenAiApiMode(data?.platform ?? '', modelProtocol);
     const optionsList = useMemo(() => {
@@ -71,7 +85,9 @@ const AddModelModal = ModalHOC<{ data?: IProvider; model?: string; onSubmit: (mo
         };
       }
 
-      onSubmit(updatedData);
+      const prepared = modelSettings.prepare(updatedData);
+      if (!prepared) return;
+      onSubmit(prepared);
       modalCtrl.close();
     }, [
       data,
@@ -85,6 +101,7 @@ const AddModelModal = ModalHOC<{ data?: IProvider; model?: string; onSubmit: (mo
       openAiApiMode,
       modalCtrl,
       showOpenAiApiMode,
+      modelSettings,
     ]);
 
     return (
@@ -99,6 +116,7 @@ const AddModelModal = ModalHOC<{ data?: IProvider; model?: string; onSubmit: (mo
         okButtonProps={{ disabled: !isEditing && !models.length }}
       >
         <div className='flex flex-col gap-16px'>
+          {modelSettings.fields}
           {isEditing ? (
             <div className='space-y-8px'>
               <div className='text-13px font-500 text-t-secondary'>{t('settings.modelName')}</div>
@@ -155,7 +173,7 @@ const AddModelModal = ModalHOC<{ data?: IProvider; model?: string; onSubmit: (mo
             <div className='text-11px text-t-secondary leading-4'>{t('settings.imageInputTip')}</div>
           </div>
 
-          {showOpenAiApiMode && (
+          {showOpenAiApiMode && !modelSettings.forceChatCompletions && (
             <div className='space-y-8px'>
               <div className='text-13px font-500 text-t-secondary'>{t('settings.openAiApiMode')}</div>
               <Select

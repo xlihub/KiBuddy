@@ -1420,5 +1420,25 @@
   "crossSessionMessageDesc": "에이전트가 다른 대화로 메시지를 보낼 수 있게 합니다. 끄면 입력창의 @@ 대화 멘션도 비활성화됩니다.",
   "crossSessionMessageDisabledBanner": "대화 간 메시지가 꺼져 있어 입력창의 @@ 대화 멘션을 사용할 수 없습니다.",
   "crossSessionMessageResume": "다시 켜기",
-  "crossSessionMessageUpdateFailed": "대화 간 메시지 설정 업데이트에 실패했습니다"
+  "crossSessionMessageUpdateFailed": "대화 간 메시지 설정 업데이트에 실패했습니다",
+  "kiBuddyModel": {
+    "manual": "모델 수동 설정",
+    "manualHint": "전체 채팅 URL과 요청 모델 ID를 입력하세요. 수동 모드는 Chat Completions를 사용하며 모델 검색, 프로토콜 감지, URL 수정을 하지 않습니다.",
+    "advanced": "고급 게이트웨이 설정",
+    "advancedHint": "현재 연결에만 적용되며 Chat Completions를 사용합니다. 기본값은 기존 동작을 유지합니다.",
+    "bearer": "Bearer 인증 전송 (API Key)",
+    "proxy": "프록시",
+    "systemProxy": "시스템 프록시",
+    "direct": "직접 연결",
+    "timeout": "제한 시간 (초)",
+    "streamOptions": "stream_options 전송",
+    "inherit": "기본값 사용",
+    "enabled": "켜기",
+    "disabled": "끄기",
+    "urlRequired": "전체 HTTP 또는 HTTPS 채팅 URL을 입력하세요.",
+    "modelRequired": "비어 있지 않은 요청 모델 ID를 입력하세요.",
+    "timeoutInvalid": "제한 시간은 초 단위의 양의 정수여야 합니다.",
+    "unavailable": "현재 Core는 수동 또는 게이트웨이 설정 저장을 지원하지 않습니다. 변경 사항이 저장되지 않았습니다.",
+    "mappingFailed": "연결 설정을 준비할 수 없습니다. 변경 사항이 저장되지 않았습니다."
+  }
 }

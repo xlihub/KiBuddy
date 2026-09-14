@@ -1421,5 +1421,25 @@
   "crossSessionMessageDesc": "Permite que agentes enviem mensagens para suas outras conversas. Desativar também desliga a menção @@ na caixa de entrada.",
   "crossSessionMessageDisabledBanner": "As mensagens entre conversas estão desativadas, a menção @@ não está disponível.",
   "crossSessionMessageResume": "Ativar novamente",
-  "crossSessionMessageUpdateFailed": "Falha ao atualizar a configuração de mensagens entre conversas"
+  "crossSessionMessageUpdateFailed": "Falha ao atualizar a configuração de mensagens entre conversas",
+  "kiBuddyModel": {
+    "manual": "Configurar modelo manualmente",
+    "manualHint": "Insira a URL completa do chat e o ID do modelo solicitado. O modo manual usa Chat Completions sem descoberta de modelos, detecção de protocolo ou correção de URL.",
+    "advanced": "Configurações avançadas do gateway",
+    "advancedHint": "Aplicam-se apenas a esta conexão com Chat Completions. Os padrões preservam o comportamento existente.",
+    "bearer": "Enviar autenticação Bearer (API Key)",
+    "proxy": "Proxy",
+    "systemProxy": "Proxy do sistema",
+    "direct": "Conexão direta",
+    "timeout": "Tempo limite (segundos)",
+    "streamOptions": "Enviar stream_options",
+    "inherit": "Usar padrão",
+    "enabled": "Ativado",
+    "disabled": "Desativado",
+    "urlRequired": "Insira uma URL completa de chat HTTP ou HTTPS.",
+    "modelRequired": "Insira pelo menos um ID de modelo solicitado não vazio.",
+    "timeoutInvalid": "O tempo limite deve ser um número inteiro positivo de segundos.",
+    "unavailable": "Esta versão do Core ainda não salva configurações manuais ou de gateway. As alterações não foram salvas.",
+    "mappingFailed": "Não foi possível preparar as configurações de conexão. As alterações não foram salvas."
+  }
 }

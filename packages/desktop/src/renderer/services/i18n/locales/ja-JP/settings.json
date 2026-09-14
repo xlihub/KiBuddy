@@ -1420,5 +1420,25 @@
   "crossSessionMessageDesc": "エージェントが他の会話にメッセージを送れるようにします。オフにすると入力欄の @@ 会話メンションも無効になります。",
   "crossSessionMessageDisabledBanner": "会話間メッセージはオフです。入力欄の @@ 会話メンションは使用できません。",
   "crossSessionMessageResume": "再度オンにする",
-  "crossSessionMessageUpdateFailed": "会話間メッセージ設定の更新に失敗しました"
+  "crossSessionMessageUpdateFailed": "会話間メッセージ設定の更新に失敗しました",
+  "kiBuddyModel": {
+    "manual": "モデルを手動設定",
+    "manualHint": "完全なチャット URL とリクエストモデル ID を入力します。手動モードは Chat Completions を使用し、モデル探索、プロトコル検出、URL 修正を行いません。",
+    "advanced": "ゲートウェイの詳細設定",
+    "advancedHint": "この接続のみに適用し、Chat Completions を使用します。既定値は既存の動作を維持します。",
+    "bearer": "Bearer 認証を送信（API Key）",
+    "proxy": "プロキシ",
+    "systemProxy": "システムプロキシ",
+    "direct": "直接接続",
+    "timeout": "タイムアウト（秒）",
+    "streamOptions": "stream_options を送信",
+    "inherit": "既定値を使用",
+    "enabled": "有効",
+    "disabled": "無効",
+    "urlRequired": "完全な HTTP または HTTPS チャット URL を入力してください。",
+    "modelRequired": "空でないリクエストモデル ID を入力してください。",
+    "timeoutInvalid": "タイムアウトは秒単位の正の整数にしてください。",
+    "unavailable": "現在の Core は手動・ゲートウェイ設定の保存に未対応です。変更は保存されていません。",
+    "mappingFailed": "接続設定を準備できませんでした。変更は保存されていません。"
+  }
 }

@@ -1420,5 +1420,25 @@
   "crossSessionMessageDesc": "允許 Agent 向你的其他對話傳送訊息。關閉後，輸入框的 @@ 對話提及與投遞功能會同時停用。",
   "crossSessionMessageDisabledBanner": "跨對話訊息已關閉，輸入框的 @@ 對話提及不可用。",
   "crossSessionMessageResume": "重新開啟",
-  "crossSessionMessageUpdateFailed": "跨對話訊息設定更新失敗"
+  "crossSessionMessageUpdateFailed": "跨對話訊息設定更新失敗",
+  "kiBuddyModel": {
+    "manual": "手動設定模型",
+    "manualHint": "請輸入完整聊天位址和請求模型 ID。手動模式使用 Chat Completions，不探索模型、不偵測協定、不自動修正位址。",
+    "advanced": "進階閘道設定",
+    "advancedHint": "選用設定僅套用於目前連線，使用 Chat Completions。保留預設可沿用原有連線行為。",
+    "bearer": "附帶 Bearer 驗證（API Key）",
+    "proxy": "代理方式",
+    "systemProxy": "系統代理",
+    "direct": "直接連線",
+    "timeout": "逾時（秒）",
+    "streamOptions": "傳送 stream_options",
+    "inherit": "使用預設設定",
+    "enabled": "開啟",
+    "disabled": "關閉",
+    "urlRequired": "請輸入完整的 HTTP 或 HTTPS 聊天位址。",
+    "modelRequired": "請至少填寫一個非空的請求模型 ID。",
+    "timeoutInvalid": "逾時必須為正整數，單位為秒。",
+    "unavailable": "目前 Core 尚不支援儲存手動模式或閘道設定，本次修改尚未儲存。",
+    "mappingFailed": "無法準備連線設定，本次修改尚未儲存。"
+  }
 }

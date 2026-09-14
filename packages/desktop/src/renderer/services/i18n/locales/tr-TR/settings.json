@@ -1418,5 +1418,25 @@
   "crossSessionMessageDesc": "Aracıların diğer sohbetlerinize mesaj göndermesine izin verir. Kapatmak giriş alanındaki @@ sohbet etiketini de devre dışı bırakır.",
   "crossSessionMessageDisabledBanner": "Sohbetler arası mesajlar kapalı, @@ sohbet etiketi kullanılamıyor.",
   "crossSessionMessageResume": "Yeniden aç",
-  "crossSessionMessageUpdateFailed": "Sohbetler arası mesaj ayarı güncellenemedi"
+  "crossSessionMessageUpdateFailed": "Sohbetler arası mesaj ayarı güncellenemedi",
+  "kiBuddyModel": {
+    "manual": "Modeli elle yapılandır",
+    "manualHint": "Tam sohbet URL’sini ve istek modeli kimliğini girin. Elle mod, model keşfi, protokol algılama veya URL düzeltmesi olmadan Chat Completions kullanır.",
+    "advanced": "Gelişmiş ağ geçidi ayarları",
+    "advancedHint": "Yalnızca bu bağlantıya uygulanır ve Chat Completions kullanır. Varsayılanlar mevcut davranışı korur.",
+    "bearer": "Bearer kimlik doğrulaması gönder (API Key)",
+    "proxy": "Proxy",
+    "systemProxy": "Sistem proxy’si",
+    "direct": "Doğrudan bağlantı",
+    "timeout": "Zaman aşımı (saniye)",
+    "streamOptions": "stream_options gönder",
+    "inherit": "Varsayılanı kullan",
+    "enabled": "Açık",
+    "disabled": "Kapalı",
+    "urlRequired": "Tam bir HTTP veya HTTPS sohbet URL’si girin.",
+    "modelRequired": "En az bir boş olmayan istek modeli kimliği girin.",
+    "timeoutInvalid": "Zaman aşımı saniye cinsinden pozitif bir tam sayı olmalıdır.",
+    "unavailable": "Bu Core sürümü henüz elle veya ağ geçidi ayarlarını kaydedemez. Değişiklikler kaydedilmedi.",
+    "mappingFailed": "Bağlantı ayarları hazırlanamadı. Değişiklikler kaydedilmedi."
+  }
 }

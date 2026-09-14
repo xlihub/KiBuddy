@@ -1418,5 +1418,25 @@
   "crossSessionMessageDesc": "Erlaubt Agenten, Nachrichten an Ihre anderen Unterhaltungen zu senden. Beim Ausschalten wird auch die @@-Erwähnung im Eingabefeld deaktiviert.",
   "crossSessionMessageDisabledBanner": "Nachrichten zwischen Unterhaltungen sind aus, die @@-Erwähnung ist nicht verfügbar.",
   "crossSessionMessageResume": "Wieder einschalten",
-  "crossSessionMessageUpdateFailed": "Einstellung konnte nicht aktualisiert werden"
+  "crossSessionMessageUpdateFailed": "Einstellung konnte nicht aktualisiert werden",
+  "kiBuddyModel": {
+    "manual": "Modell manuell konfigurieren",
+    "manualHint": "Vollständige Chat-URL und Anfrage-Modell-ID eingeben. Der manuelle Modus nutzt Chat Completions ohne Modell- oder Protokollerkennung und ohne URL-Korrektur.",
+    "advanced": "Erweiterte Gateway-Einstellungen",
+    "advancedHint": "Gilt nur für diese Verbindung mit Chat Completions. Standardwerte erhalten das bisherige Verhalten.",
+    "bearer": "Bearer-Authentifizierung senden (API Key)",
+    "proxy": "Proxy",
+    "systemProxy": "Systemproxy",
+    "direct": "Direktverbindung",
+    "timeout": "Zeitlimit (Sekunden)",
+    "streamOptions": "stream_options senden",
+    "inherit": "Standard verwenden",
+    "enabled": "Aktiviert",
+    "disabled": "Deaktiviert",
+    "urlRequired": "Eine vollständige HTTP- oder HTTPS-Chat-URL eingeben.",
+    "modelRequired": "Mindestens eine nicht leere Anfrage-Modell-ID eingeben.",
+    "timeoutInvalid": "Das Zeitlimit muss eine positive ganze Zahl in Sekunden sein.",
+    "unavailable": "Diese Core-Version kann manuelle oder Gateway-Einstellungen noch nicht speichern. Änderungen wurden nicht gespeichert.",
+    "mappingFailed": "Verbindungseinstellungen konnten nicht vorbereitet werden. Änderungen wurden nicht gespeichert."
+  }
 }

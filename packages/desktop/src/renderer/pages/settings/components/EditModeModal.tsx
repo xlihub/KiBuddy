@@ -1,3 +1,4 @@
+import { useKiBuddyModelSettings } from '@/renderer/pages/ki-buddy/ModelSettings';
 import type { IProvider } from '@/common/config/storage';
 import ModalHOC from '@/renderer/utils/ui/ModalHOC';
 import { Form, Input, Message, Select, Tag } from '@arco-design/web-react';
@@ -34,7 +35,12 @@ const EditModeModal = ModalHOC<{ data?: IProvider; onChange(data: IProvider): vo
       return getProviderLogo({ name: data?.name, base_url: data?.base_url, platform: data?.platform });
     }, [data?.name, data?.base_url, data?.platform]);
 
-    const isFullUrl = data?.is_full_url ?? false;
+    const modelSettings = useKiBuddyModelSettings({
+      platform: data?.platform,
+      provider: data,
+      visible: modalProps.visible,
+    });
+    const isFullUrl = modelSettings.forceFullUrl || (data?.is_full_url ?? false);
 
     // A non-destructive hint shown when a refresh after a Base URL change
     // succeeds but a currently selected model is absent from the new list. It
@@ -49,7 +55,8 @@ const EditModeModal = ModalHOC<{ data?: IProvider; onChange(data: IProvider): vo
       isFullUrl ? '' : effectiveBaseUrl,
       isFullUrl ? '' : effectiveApiKey,
       true,
-      undefined
+      undefined,
+      modelSettings.discoveryEnabled
     );
 
     // Re-fetch the model list after the user edits the Base URL. This is
@@ -162,7 +169,9 @@ const EditModeModal = ModalHOC<{ data?: IProvider; onChange(data: IProvider): vo
               };
             }
 
-            props.onChange(updatedProvider);
+            const prepared = modelSettings.prepare(updatedProvider);
+            if (!prepared) return;
+            props.onChange(prepared);
             modalCtrl.close();
           } catch {
             // Validation failed — Arco Form highlights invalid fields automatically
@@ -188,6 +197,8 @@ const EditModeModal = ModalHOC<{ data?: IProvider; onChange(data: IProvider): vo
             >
               <Input data-testid='model-provider-name' placeholder={t('settings.modelProvider')} />
             </Form.Item>
+
+            {modelSettings.fields}
 
             {/* Base URL */}
             <Form.Item
