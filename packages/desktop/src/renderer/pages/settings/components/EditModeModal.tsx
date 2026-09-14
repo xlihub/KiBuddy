@@ -10,7 +10,7 @@ import useModeModeList from '@renderer/hooks/agent/useModeModeList';
 import { getProviderLogo } from '@/renderer/utils/model/modelPlatforms';
 import { ProviderLogo } from '@/renderer/components/agent/ThemedLogo';
 
-const EditModeModal = ModalHOC<{ data?: IProvider; onChange(data: IProvider): void }>(
+const EditModeModal = ModalHOC<{ data?: IProvider; onChange(data: IProvider): void | Promise<boolean | void> }>(
   ({ modalProps, modalCtrl, ...props }) => {
     const { t } = useTranslation();
     const { data } = props;
@@ -145,10 +145,11 @@ const EditModeModal = ModalHOC<{ data?: IProvider; onChange(data: IProvider): vo
         style={{ minHeight: '400px' }}
         onOk={async () => {
           if (
-            modelSettings.submitManual((next) => {
-              props.onChange(next);
+            modelSettings.manual &&
+            (await modelSettings.submitManual(async (next) => {
+              if ((await props.onChange(next)) === false) return;
               modalCtrl.close();
-            })
+            }))
           )
             return;
           try {
@@ -178,7 +179,7 @@ const EditModeModal = ModalHOC<{ data?: IProvider; onChange(data: IProvider): vo
 
             const prepared = modelSettings.prepare(updatedProvider);
             if (!prepared) return;
-            props.onChange(prepared);
+            if ((await props.onChange(prepared)) === false) return;
             modalCtrl.close();
           } catch {
             // Validation failed — Arco Form highlights invalid fields automatically

@@ -1,4 +1,4 @@
-import { Alert, Input, Select, Switch } from '@arco-design/web-react';
+import { Alert, Button, Input, Select, Switch } from '@arco-design/web-react';
 import React from 'react';
 import { KiBuddyGatewayFields } from './KiBuddyGatewayFields';
 import { useTranslation } from 'react-i18next';
@@ -13,6 +13,9 @@ type Props = {
   modelOnly: boolean;
   editingModel?: string;
   error?: string;
+  presetHint?: boolean;
+  onRestorePreset?: () => void;
+  onConfirmGatewayClear?: () => void;
 };
 
 /** Product-owned controls composed into the existing provider dialogs. */
@@ -25,6 +28,9 @@ export function KiBuddyModelSettingsFields({
   onDraftChange,
   modelOnly,
   editingModel,
+  presetHint,
+  onRestorePreset,
+  onConfirmGatewayClear,
 }: Props) {
   const { t } = useTranslation();
   const setGateway = (patch: NonNullable<KiBuddyModelSettings['gateway']>) => {
@@ -34,6 +40,13 @@ export function KiBuddyModelSettingsFields({
 
   return (
     <div className='flex flex-col gap-12px mb-12px'>
+      {presetHint && <Alert type='info' content={t('settings.kiBuddyModel.presetHint')} />}
+      {onRestorePreset && (
+        <div>
+          <Button onClick={onRestorePreset}>{t('settings.kiBuddyModel.restorePreset')}</Button>
+          <div className='text-12px text-t-secondary'>{t('settings.kiBuddyModel.restorePresetHint')}</div>
+        </div>
+      )}
       {editable && (
         <div className='flex items-center gap-8px'>
           <Switch
@@ -43,6 +56,15 @@ export function KiBuddyModelSettingsFields({
           />
           <span className='text-13px text-t-primary'>{t('settings.kiBuddyModel.manual')}</span>
         </div>
+      )}
+      {onConfirmGatewayClear && (
+        <Alert
+          type='warning'
+          content={t('settings.kiBuddyModel.confirmClearGateway')}
+          action={
+            <Button onClick={onConfirmGatewayClear}>{t('settings.kiBuddyModel.confirmClearGatewayAction')}</Button>
+          }
+        />
       )}
       {value.manual && <Alert type='info' content={t('settings.kiBuddyModel.manualHint')} />}
       {value.manual && (
@@ -65,7 +87,7 @@ export function KiBuddyModelSettingsFields({
                   onChange={(endpoint) => onDraftChange({ ...draft, endpoint })}
                 />
               </label>
-              <label className='flex flex-col gap-4px'>
+              <div className='flex flex-col gap-4px'>
                 <span>{t('settings.kiBuddyModel.bearer')}</span>
                 <Select
                   aria-label={t('settings.kiBuddyModel.bearer')}
@@ -79,7 +101,12 @@ export function KiBuddyModelSettingsFields({
                   ]}
                   onChange={(next) => setGateway({ bearer: next === 'default' ? undefined : next === 'enabled' })}
                 />
-              </label>
+              </div>
+              {value.gateway?.bearer === false && draft.apiKey && (
+                <Button onClick={() => onDraftChange({ ...draft, apiKey: '' })}>
+                  {t('settings.kiBuddyModel.clearApiKey')}
+                </Button>
+              )}
               {value.gateway?.bearer !== false && (
                 <label className='flex flex-col gap-4px'>
                   <span>{t('settings.kiBuddyModel.apiKey')}</span>

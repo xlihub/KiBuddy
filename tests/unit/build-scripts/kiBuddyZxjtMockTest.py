@@ -29,6 +29,14 @@ class GatewayTests(unittest.TestCase):
         self.server = MockServer(self.options)
         # Tests never inherit local credentials chosen for a developer's running server.
         self.server.credentials = AUTH.copy()
+        self.recorded = threading.Event()
+        original_record = self.server.record
+
+        def record_and_signal(record):
+            original_record(record)
+            self.recorded.set()
+
+        self.server.record = record_and_signal
         self.thread = threading.Thread(target=self.server.serve_forever, kwargs={"poll_interval": 0.01}, daemon=True)
         self.thread.start()
 
@@ -73,9 +81,7 @@ class GatewayTests(unittest.TestCase):
             self.assertTrue(response.read().startswith("data:001|身份验证失败".encode()))
         finally:
             client.close()
-        deadline = time.monotonic() + 1
-        while not self.server.records and time.monotonic() < deadline:
-            time.sleep(0.01)
+        self.assertTrue(self.recorded.wait(timeout=2), "request was not recorded")
         self.assertEqual(self.server.records[-1]["behavior"], "synthetic-auth")
         self.assertEqual(self.server.records[-1]["captureCase"], "auth-omit_secretKey")
 
@@ -202,9 +208,7 @@ class GatewayTests(unittest.TestCase):
     def test_journal_reports_request_options_without_credentials_or_content(self):
         private_text = "secret-business-prompt-953"
         self.post(body={**BODY, "messages": [{"role": "user", "content": private_text}], "stream_options": {"include_usage": True}})
-        deadline = time.monotonic() + 1
-        while not self.server.records and time.monotonic() < deadline:
-            time.sleep(0.01)
+        self.assertTrue(self.recorded.wait(timeout=2), "request journal was not committed")
         journal = Path(self.options.record).read_text()
         for secret in [*AUTH.values(), private_text]:
             self.assertNotIn(secret, journal)

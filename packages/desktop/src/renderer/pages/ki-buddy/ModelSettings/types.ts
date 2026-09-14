@@ -1,12 +1,18 @@
 import type { IProvider } from '@/common/config/storage';
 
-/** UI values only; these names are not a Ki-Core wire contract. */
+/** Product form values; the adapter maps seconds and credential actions to Core. */
 export type KiBuddyModelSettings = {
   manual: boolean;
   gateway?: {
     bearer?: boolean;
-    proxy?: 'system' | 'direct';
-    headers?: { name: string; value: string }[];
+    proxy?: 'default' | 'direct';
+    headers?: {
+      name: string;
+      value: string;
+      sensitive?: boolean;
+      configured?: boolean;
+      credentialAction?: 'keep' | 'replace' | 'clear';
+    }[];
     connectTimeoutSeconds?: number;
     readTimeoutSeconds?: number;
     totalTimeoutSeconds?: number;

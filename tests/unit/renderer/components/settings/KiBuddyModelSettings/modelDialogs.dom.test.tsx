@@ -115,13 +115,29 @@ describe('KiBuddy model dialogs', () => {
 
   it('saves an explicit no-Bearer draft without API key or dropdown suggestions', async () => {
     const user = await createForm();
-    await user.click(screen.getByLabelText('settings.kiBuddyModel.bearer'));
-    fireEvent.click(screen.getByText('settings.kiBuddyModel.noBearer'));
+    await user.click(screen.getByText('settings.kiBuddyModel.defaultBearer'));
+    const noBearer = await screen.findByText('settings.kiBuddyModel.noBearer');
+    await waitFor(() => expect(getComputedStyle(noBearer).pointerEvents).not.toBe('none'));
+    await user.click(noBearer);
+    await user.click(screen.getByText('settings.kiBuddyModel.advanced'));
+    for (const [current, option] of [
+      ['settings.kiBuddyModel.defaultProxy', 'settings.kiBuddyModel.direct'],
+      ['settings.kiBuddyModel.defaultEnabled', 'settings.kiBuddyModel.disabled'],
+    ]) {
+      await user.click(screen.getByText(current));
+      const choice = await screen.findByText(option);
+      await waitFor(() => expect(getComputedStyle(choice).pointerEvents).not.toBe('none'));
+      await user.click(choice);
+    }
     await user.type(screen.getByLabelText('settings.kiBuddyModel.chatEndpoint'), 'https://example.invalid/chat');
     await user.type(screen.getByLabelText('settings.kiBuddyModel.requestModelId'), 'private-id');
     await user.click(screen.getByText('common.confirm'));
     await waitFor(() => expect(submit).toHaveBeenCalledOnce());
-    expect(submit.mock.calls[0][0]).toMatchObject({ api_key: '', models: ['private-id'] });
+    expect(submit.mock.calls[0][0]).toMatchObject({
+      api_key: '',
+      models: ['private-id'],
+      testOnlySettings: { gateway: { bearer: false, proxy: 'direct', streamOptions: false } },
+    });
     expect([mocks.fetch.mock.calls, mocks.detect.mock.calls]).toEqual([[], []]);
   });
 
@@ -397,5 +413,68 @@ describe('KiBuddy model dialogs', () => {
     expect(
       mocks.fetch.mock.calls.every(([request]) => request.base_url !== 'https://example.invalid/cancelled-private-chat')
     ).toBe(true);
+  });
+});
+
+describe('explicit credential removal', () => {
+  it('does not discard saved header credentials when the manual switch alone is disabled', async () => {
+    const user = userEvent.setup();
+    const data = provider({
+      manual: true,
+      gateway: {
+        headers: [{ name: 'X-Private', sensitive: true, configured: true, credentialAction: 'keep', value: '' }],
+      },
+    });
+    render(wrap(<EditModeModal data={data} modalProps={{ visible: true }} modalCtrl={{ close }} onChange={submit} />));
+    await user.click(screen.getByLabelText('settings.kiBuddyModel.manual'));
+    await user.click(screen.getByText('common.save'));
+    expect(submit).not.toHaveBeenCalled();
+    await user.click(screen.getByText('settings.kiBuddyModel.confirmClearGatewayAction'));
+    await user.click(screen.getByText('common.save'));
+    await waitFor(() => expect(submit).toHaveBeenCalledOnce());
+  });
+  it('offers API Key clearing without enabling Bearer', async () => {
+    const user = userEvent.setup();
+    render(
+      wrap(
+        <EditModeModal
+          data={provider({ manual: true, gateway: { bearer: false } })}
+          modalProps={{ visible: true }}
+          modalCtrl={{ close }}
+          onChange={submit}
+        />
+      )
+    );
+    await user.click(screen.getByText('settings.kiBuddyModel.clearApiKey'));
+    await user.click(screen.getByText('common.save'));
+    await waitFor(() =>
+      expect(submit).toHaveBeenCalledWith(
+        expect.objectContaining({ api_key: '', testOnlySettings: { manual: true, gateway: { bearer: false } } })
+      )
+    );
+  });
+  it('retains a manual draft while persistence is pending or reports failure', async () => {
+    const user = userEvent.setup();
+    let finish!: (value: boolean) => void;
+    const pending = new Promise<boolean>((resolve) => {
+      finish = resolve;
+    });
+    render(
+      wrap(
+        <EditModeModal
+          data={provider({ manual: true })}
+          modalProps={{ visible: true }}
+          modalCtrl={{ close }}
+          onChange={() => pending}
+        />
+      )
+    );
+    await user.click(screen.getByText('common.save'));
+    expect(close).not.toHaveBeenCalled();
+    await act(async () => finish(false));
+    expect(close).not.toHaveBeenCalled();
+    expect(screen.getByLabelText('settings.kiBuddyModel.chatEndpoint')).toHaveValue(
+      'https://example.invalid/inner/chat?route=test'
+    );
   });
 });

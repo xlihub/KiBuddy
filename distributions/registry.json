@@ -34,7 +34,7 @@
         },
         "integrations": [],
         "disabledFeatures": ["account", "about", "feedback", "githubResources"],
-        "nonSensitiveConfigKeys": [],
+        "nonSensitiveConfigKeys": ["modelPreset"],
         "buildCredentialNames": []
       }
     }

@@ -1,3 +1,7 @@
+import { restoreKiBuddyModelPreset, presetProviderId } from './kiBuddyModelPreset';
+export { KiBuddyModelPresetInitialization } from './KiBuddyModelPresetInitialization';
+import { kiBuddyProviderAdapter } from './kiBuddyProviderAdapter';
+export { persistKiBuddyProvider } from './kiBuddyProviderAdapter';
 import { uuid } from '@/common/utils';
 import type { IProvider } from '@/common/config/storage';
 import { getKiBuddyProductRuntime } from '@/renderer/services/runtime/kiBuddyRuntime';
@@ -9,8 +13,9 @@ import type { KiBuddyManualModelDraft, KiBuddyModelSettings, KiBuddyModelSetting
 
 export type { KiBuddyModelSettings, KiBuddyModelSettingsAdapter } from './types';
 
-// No production adapter until Core #22 publishes its wire and default semantics.
-export const KiBuddyModelSettingsAdapterContext = createContext<KiBuddyModelSettingsAdapter | null>(null);
+export const KiBuddyModelSettingsAdapterContext = createContext<KiBuddyModelSettingsAdapter | null>(
+  kiBuddyProviderAdapter
+);
 
 type Options = {
   platform?: string;
@@ -38,7 +43,19 @@ export function useKiBuddyModelSettings({ platform, provider, visible, editable 
       apiKey: provider?.api_key ?? '',
       modelIds: editable ? (provider?.models.join('\n') ?? '') : (editingModel ?? ''),
     };
-    return { provider, platform, visible, adapter, enabled, editingModel, value, draft, originalManual: value.manual };
+    return {
+      provider,
+      platform,
+      visible,
+      adapter,
+      enabled,
+      editingModel,
+      value,
+      draft,
+      originalHasCredentials: Boolean(value.gateway?.headers?.some((header) => header.sensitive && header.configured)),
+      clearGatewayConfirmed: false,
+      originalManual: value.manual,
+    };
   };
   const [state, setState] = useState(initial);
   const [error, setError] = useState<string>();
@@ -57,7 +74,11 @@ export function useKiBuddyModelSettings({ platform, provider, visible, editable 
     setError(undefined);
   }
   const manual = enabled && value.manual;
+  const preset = enabled ? getKiBuddyProductRuntime()?.modelPreset : undefined;
+  const canRestorePreset =
+    editable && preset && (provider?.id === presetProviderId(preset) || provider?.base_url === preset.endpoint);
   const configured = manual;
+  const needsGatewayClear = enabled && !manual && current.originalHasCredentials && !current.clearGatewayConfirmed;
   const fullUrlOverride = enabled && (manual || current.originalManual) ? manual : undefined;
 
   const prepare = (next: IProvider): IProvider | null => {
@@ -66,6 +87,7 @@ export function useKiBuddyModelSettings({ platform, provider, visible, editable 
       setError(message);
       return null;
     };
+    if (needsGatewayClear) return fail(t('settings.kiBuddyModel.confirmClearGateway'));
     if (manual) {
       try {
         const url = new URL(next.base_url);
@@ -83,7 +105,7 @@ export function useKiBuddyModelSettings({ platform, provider, visible, editable 
     const prepared = configured
       ? {
           ...endpoint,
-          api_key: value.gateway?.bearer === false ? '' : endpoint.api_key,
+          api_key: endpoint.api_key,
           model_settings: Object.fromEntries(
             next.models.map((model) => [
               model,
@@ -103,7 +125,7 @@ export function useKiBuddyModelSettings({ platform, provider, visible, editable 
   };
 
   // Returns true when the product consumes submission, including validation failure.
-  const submitManual = (onSave: (next: IProvider) => void): boolean => {
+  const submitManual = async (onSave: (next: IProvider) => void | Promise<void>): Promise<boolean> => {
     if (!manual) return false;
     const ids = current.draft.modelIds
       .split('\n')
@@ -123,7 +145,13 @@ export function useKiBuddyModelSettings({ platform, provider, visible, editable 
       models: editable ? [...new Set(ids)] : [...new Set([...(provider?.models ?? []), ...ids])],
     };
     const prepared = prepare(next);
-    if (prepared) onSave(prepared);
+    if (prepared) {
+      try {
+        await onSave(prepared);
+      } catch {
+        setError(t('settings.saveModelConfigFailed'));
+      }
+    }
     return true;
   };
 
@@ -137,6 +165,24 @@ export function useKiBuddyModelSettings({ platform, provider, visible, editable 
     fields: enabled ? (
       <KiBuddyModelSettingsFields
         value={value}
+        onConfirmGatewayClear={
+          needsGatewayClear
+            ? () => {
+                setState({ ...current, clearGatewayConfirmed: true });
+                setError(undefined);
+              }
+            : undefined
+        }
+        presetHint={Boolean(canRestorePreset)}
+        onRestorePreset={
+          canRestorePreset
+            ? () => {
+                const restored = restoreKiBuddyModelPreset(preset, current.draft, value);
+                setState({ ...current, ...restored });
+                setError(undefined);
+              }
+            : undefined
+        }
         draft={current.draft}
         modelOnly={!editable}
         editingModel={editingModel}

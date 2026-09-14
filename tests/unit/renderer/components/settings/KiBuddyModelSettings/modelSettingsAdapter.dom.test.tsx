@@ -131,7 +131,7 @@ describe('KiBuddy model settings adapter boundary', () => {
     render(<Harness />);
     fireEvent.click(screen.getByText('save'));
     expect(write).toHaveBeenCalledWith(
-      expect.objectContaining({ api_key: '' }),
+      expect.objectContaining({ api_key: record.api_key }),
       expect.objectContaining({
         gateway: { bearer: false, headers: [{ name: 'Authorization', value: 'Custom synthetic' }] },
       })
@@ -161,7 +161,7 @@ describe('KiBuddy model settings adapter boundary', () => {
 
   it('preserves separate SDK connection, read and total request timeouts', () => {
     const gateway = {
-      connectTimeoutSeconds: 0,
+      connectTimeoutSeconds: 0.001,
       readTimeoutSeconds: 0.5,
       totalTimeoutSeconds: 120,
       streamOptions: false,

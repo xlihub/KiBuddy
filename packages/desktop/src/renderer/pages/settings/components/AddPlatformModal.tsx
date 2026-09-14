@@ -203,7 +203,7 @@ const renderPlatformOption = (platform: PlatformConfig, t?: (key: string) => str
 };
 
 const AddPlatformModal = ModalHOC<{
-  onSubmit: (platform: IProvider) => void;
+  onSubmit: (platform: IProvider) => void | Promise<boolean | void>;
   deepLinkData?: DeepLinkAddProviderDetail;
 }>(({ modalProps, onSubmit, modalCtrl, deepLinkData }) => {
   const [message, messageContext] = Message.useMessage();
@@ -347,17 +347,18 @@ const AddPlatformModal = ModalHOC<{
     }
   }, [modelListState.data?.fix_base_url, form, modelSettings.discoveryEnabled]);
 
-  const handleSubmit = () => {
+  const handleSubmit = async () => {
     if (
-      modelSettings.submitManual((next) => {
-        onSubmit(next);
+      modelSettings.manual &&
+      (await modelSettings.submitManual(async (next) => {
+        if ((await onSubmit(next)) === false) return;
         modalCtrl.close();
-      })
+      }))
     )
       return;
     form
       .validate()
-      .then((values) => {
+      .then(async (values) => {
         // 如果有 i18nKey 使用翻译后的名称，否则使用 platform 的 name
         // If i18nKey exists use translated name, otherwise use platform name
         const name = selectedPlatform?.i18nKey
@@ -412,7 +413,7 @@ const AddPlatformModal = ModalHOC<{
 
         const prepared = modelSettings.prepare(provider);
         if (!prepared) return;
-        onSubmit(prepared);
+        if ((await onSubmit(prepared)) === false) return;
         modalCtrl.close();
       })
       .catch(() => {

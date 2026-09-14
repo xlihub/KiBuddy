@@ -19,7 +19,9 @@ import {
   detectNewApiProtocol,
 } from '@/renderer/utils/model/modelPlatforms';
 
-const AddModelModal = ModalHOC<{ data?: IProvider; model?: string; onSubmit: (model: IProvider) => void }>(
+type ModelSave = (model: IProvider) => void | Promise<boolean | void>;
+
+const AddModelModal = ModalHOC<{ data?: IProvider; model?: string; onSubmit: ModelSave }>(
   ({ modalProps, data, model: editingModel, onSubmit, modalCtrl }) => {
     const { t } = useTranslation();
     const [models, setModels] = useState<string[]>([]);
@@ -64,12 +66,13 @@ const AddModelModal = ModalHOC<{ data?: IProvider; model?: string; onSubmit: (mo
       setModelProtocol(editingModel ? (data?.model_protocols?.[editingModel] ?? 'openai') : 'openai');
     }, [data, editingModel, modalProps.visible]);
 
-    const handleConfirm = useCallback(() => {
+    const handleConfirm = useCallback(async () => {
       if (
-        modelSettings.submitManual((next) => {
-          onSubmit(next);
+        modelSettings.manual &&
+        (await modelSettings.submitManual(async (next) => {
+          if ((await onSubmit(next)) === false) return;
           modalCtrl.close();
-        })
+        }))
       )
         return;
       if (!data || (!editingModel && !models.length)) return;
@@ -95,7 +98,7 @@ const AddModelModal = ModalHOC<{ data?: IProvider; model?: string; onSubmit: (mo
 
       const prepared = modelSettings.prepare(updatedData);
       if (!prepared) return;
-      onSubmit(prepared);
+      if ((await onSubmit(prepared)) === false) return;
       modalCtrl.close();
     }, [
       data,

@@ -15,6 +15,93 @@ declare const __KI_BUDDY_EFFECTIVE_PRODUCT_CONFIG__: unknown;
 export type KiBuddyDistributionIdentityMode = 'agents' | 'local';
 export type KiBuddyProductIntegration = 'agentsGateway';
 
+/** Non-sensitive installation defaults, independently versioned from saved connections. */
+export type KiBuddyModelPreset = {
+  id: string;
+  name: string;
+  endpoint: string;
+  modelIds: string[];
+  headerNames: string[];
+  manual: true;
+  protocol: 'chat_completions';
+  bearer: boolean;
+  proxy: 'default' | 'direct';
+  streamOptions: boolean;
+};
+
+/** Reject credentials and unknown options before publishing a renderer capability. */
+export function parseKiBuddyModelPreset(value: unknown): KiBuddyModelPreset | undefined {
+  if (value === undefined) return undefined;
+  const preset = requireRecord(value, 'Ki-Buddy model preset');
+  requireExactKeys(
+    preset,
+    ['id', 'name', 'endpoint', 'modelIds', 'headerNames', 'manual', 'protocol', 'bearer', 'proxy', 'streamOptions'],
+    'Ki-Buddy model preset'
+  );
+  const invalid = () => new Error('Invalid Ki-Buddy model preset');
+  if (typeof preset.id !== 'string' || !/^[a-z0-9][a-z0-9-]*$/.test(preset.id)) throw invalid();
+  if (typeof preset.name !== 'string' || !preset.name.trim()) throw invalid();
+  if (typeof preset.endpoint !== 'string') throw invalid();
+  try {
+    const url = new URL(preset.endpoint);
+    if (!['http:', 'https:'].includes(url.protocol) || url.username || url.password) throw invalid();
+  } catch {
+    throw invalid();
+  }
+  if (
+    !Array.isArray(preset.modelIds) ||
+    !preset.modelIds.length ||
+    preset.modelIds.some((model) => typeof model !== 'string' || !model.trim())
+  )
+    throw invalid();
+  if (
+    !Array.isArray(preset.headerNames) ||
+    preset.headerNames.length > 64 ||
+    preset.headerNames.some((name) => typeof name !== 'string' || !/^[!#$%&'*+.^_`|~0-9A-Za-z-]+$/.test(name))
+  )
+    throw invalid();
+  const headers = preset.headerNames.map((name: string) => name.toLowerCase());
+  if (
+    new Set(headers).size !== headers.length ||
+    headers.some((name) =>
+      [
+        'content-type',
+        'content-length',
+        'transfer-encoding',
+        'host',
+        'connection',
+        'proxy-authorization',
+        'proxy-authenticate',
+        'trailer',
+        'upgrade',
+        'te',
+      ].includes(name)
+    ) ||
+    (preset.bearer && headers.includes('authorization'))
+  )
+    throw invalid();
+  if (
+    preset.manual !== true ||
+    preset.protocol !== 'chat_completions' ||
+    typeof preset.bearer !== 'boolean' ||
+    typeof preset.streamOptions !== 'boolean' ||
+    !['default', 'direct'].includes(String(preset.proxy))
+  )
+    throw invalid();
+  return {
+    id: preset.id,
+    name: preset.name,
+    endpoint: preset.endpoint,
+    modelIds: [...preset.modelIds],
+    headerNames: [...preset.headerNames],
+    manual: true,
+    protocol: 'chat_completions',
+    bearer: preset.bearer,
+    proxy: preset.proxy as 'default' | 'direct',
+    streamOptions: preset.streamOptions,
+  };
+}
+
 export type KiBuddyProductConfig = DeepReadonly<{
   assets: {
     packaged: {
@@ -248,6 +335,8 @@ function parseDistribution(value: unknown): KiBuddyProductConfig['distribution']
   if (new Set(integrations).size !== integrations.length) {
     throw new Error('Ki-Buddy distribution integrations must be unique');
   }
+  const nonSensitiveConfig = requireRecord(distribution.nonSensitiveConfig, 'Ki-Buddy distribution configuration');
+  parseKiBuddyModelPreset(nonSensitiveConfig.modelPreset);
   return deepFreeze({
     schemaVersion: 1,
     distributionId,
@@ -259,7 +348,7 @@ function parseDistribution(value: unknown): KiBuddyProductConfig['distribution']
       distribution.credentialNamespace,
       'Ki-Buddy distribution credential namespace'
     ),
-    nonSensitiveConfig: requireRecord(distribution.nonSensitiveConfig, 'Ki-Buddy distribution configuration'),
+    nonSensitiveConfig,
   });
 }
 
