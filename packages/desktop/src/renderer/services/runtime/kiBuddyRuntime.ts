@@ -43,6 +43,7 @@ export type KiBuddyProductRuntime = {
   };
   defaultLanguage: string | null;
   id: 'ki-buddy';
+  modelPreset?: KiBuddyProductCapability['modelPreset'];
   integrations: readonly KiBuddyProductIntegration[];
   localeNamespace: string;
   productExperience: ProductExperience;
@@ -71,6 +72,7 @@ export function getKiBuddyProductRuntime(): KiBuddyProductRuntime | null {
       brand: { ...product.brand, logoUrl, mascotUrl },
       defaultLanguage: KI_BUDDY_DEFAULT_LANGUAGE ?? null,
       integrations: product.integrations,
+      modelPreset: product.modelPreset,
       localeNamespace: product.locale.namespace,
       productExperience,
       themes: product.themes,

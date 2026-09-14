@@ -1,3 +1,4 @@
+import { useKiBuddyModelSettings } from '@/renderer/pages/ki-buddy/ModelSettings';
 import type { IProvider } from '@/common/config/storage';
 import {
   type ModelImageInputChoice,
@@ -18,7 +19,9 @@ import {
   detectNewApiProtocol,
 } from '@/renderer/utils/model/modelPlatforms';
 
-const AddModelModal = ModalHOC<{ data?: IProvider; model?: string; onSubmit: (model: IProvider) => void }>(
+type ModelSave = (model: IProvider) => void | Promise<boolean | void>;
+
+const AddModelModal = ModalHOC<{ data?: IProvider; model?: string; onSubmit: ModelSave }>(
   ({ modalProps, data, model: editingModel, onSubmit, modalCtrl }) => {
     const { t } = useTranslation();
     const [models, setModels] = useState<string[]>([]);
@@ -27,7 +30,21 @@ const AddModelModal = ModalHOC<{ data?: IProvider; model?: string; onSubmit: (mo
     const [openAiApiMode, setOpenAiApiMode] = useState<ModelOpenAiApiModeChoice>('auto');
     const isNewApi = isNewApiPlatform(data?.platform ?? '');
     const isEditing = Boolean(editingModel);
-    const { data: modelList, isLoading } = useModeModeList(data?.platform, data?.base_url, data?.api_key);
+    const modelSettings = useKiBuddyModelSettings({
+      platform: data?.platform,
+      provider: data,
+      visible: modalProps.visible,
+      editable: false,
+      editingModel,
+    });
+    const { data: modelList, isLoading } = useModeModeList(
+      data?.platform,
+      data?.base_url,
+      data?.api_key,
+      undefined,
+      undefined,
+      modelSettings.discoveryEnabled
+    );
     const existingModels = data?.models || [];
     const showOpenAiApiMode = supportsOpenAiApiMode(data?.platform ?? '', modelProtocol);
     const optionsList = useMemo(() => {
@@ -49,7 +66,15 @@ const AddModelModal = ModalHOC<{ data?: IProvider; model?: string; onSubmit: (mo
       setModelProtocol(editingModel ? (data?.model_protocols?.[editingModel] ?? 'openai') : 'openai');
     }, [data, editingModel, modalProps.visible]);
 
-    const handleConfirm = useCallback(() => {
+    const handleConfirm = useCallback(async () => {
+      if (
+        modelSettings.manual &&
+        (await modelSettings.submitManual(async (next) => {
+          if ((await onSubmit(next)) === false) return;
+          modalCtrl.close();
+        }))
+      )
+        return;
       if (!data || (!editingModel && !models.length)) return;
       const targetModels = editingModel ? [editingModel] : models;
       const updatedData: IProvider = {
@@ -71,7 +96,9 @@ const AddModelModal = ModalHOC<{ data?: IProvider; model?: string; onSubmit: (mo
         };
       }
 
-      onSubmit(updatedData);
+      const prepared = modelSettings.prepare(updatedData);
+      if (!prepared) return;
+      if ((await onSubmit(prepared)) === false) return;
       modalCtrl.close();
     }, [
       data,
@@ -85,6 +112,7 @@ const AddModelModal = ModalHOC<{ data?: IProvider; model?: string; onSubmit: (mo
       openAiApiMode,
       modalCtrl,
       showOpenAiApiMode,
+      modelSettings,
     ]);
 
     return (
@@ -96,83 +124,88 @@ const AddModelModal = ModalHOC<{ data?: IProvider; model?: string; onSubmit: (mo
         onOk={handleConfirm}
         okText={t('common.confirm')}
         cancelText={t('common.cancel')}
-        okButtonProps={{ disabled: !isEditing && !models.length }}
+        okButtonProps={{ disabled: !modelSettings.manual && !isEditing && !models.length }}
       >
         <div className='flex flex-col gap-16px'>
-          {isEditing ? (
-            <div className='space-y-8px'>
-              <div className='text-13px font-500 text-t-secondary'>{t('settings.modelName')}</div>
-              <div className='text-14px text-t-primary'>{editingModel}</div>
-            </div>
-          ) : (
-            <div className='space-y-8px'>
-              <div className='text-13px font-500 text-t-secondary'>{t('settings.addModelPlaceholder')}</div>
-              <Select
-                mode='multiple'
-                showSearch
-                options={optionsList}
-                loading={isLoading}
-                onChange={(value: string[]) => {
-                  setModels(value);
-                  // new-api 平台：以最后选中的模型推断协议 / new-api: infer protocol from the last picked model
-                  if (isNewApi && value.length > 0) setModelProtocol(detectNewApiProtocol(value[value.length - 1]));
-                }}
-                value={models}
-                allowCreate
-                placeholder={t('settings.addModelPlaceholder')}
-              />
-            </div>
-          )}
+          {modelSettings.fields}
+          {!modelSettings.manual && (
+            <>
+              {isEditing ? (
+                <div className='space-y-8px'>
+                  <div className='text-13px font-500 text-t-secondary'>{t('settings.modelName')}</div>
+                  <div className='text-14px text-t-primary'>{editingModel}</div>
+                </div>
+              ) : (
+                <div className='space-y-8px'>
+                  <div className='text-13px font-500 text-t-secondary'>{t('settings.addModelPlaceholder')}</div>
+                  <Select
+                    mode='multiple'
+                    showSearch
+                    options={optionsList}
+                    loading={isLoading}
+                    onChange={(value: string[]) => {
+                      setModels(value);
+                      // new-api 平台：以最后选中的模型推断协议 / new-api: infer protocol from the last picked model
+                      if (isNewApi && value.length > 0) setModelProtocol(detectNewApiProtocol(value[value.length - 1]));
+                    }}
+                    value={models}
+                    allowCreate
+                    placeholder={t('settings.addModelPlaceholder')}
+                  />
+                </div>
+              )}
 
-          {/* New API 协议选择 / New API Protocol Selection */}
-          {isNewApi && (
-            <div className='space-y-8px'>
-              <div className='text-13px font-500 text-t-secondary'>{t('settings.modelProtocol')}</div>
-              <Select
-                value={modelProtocol}
-                onChange={setModelProtocol}
-                options={NEW_API_PROTOCOL_OPTIONS}
-                triggerProps={{ getPopupContainer: (node) => node.parentElement || document.body }}
-              />
-              <div className='text-11px text-t-secondary leading-4'>{t('settings.modelProtocolTip')}</div>
-            </div>
-          )}
+              {/* New API 协议选择 / New API Protocol Selection */}
+              {isNewApi && (
+                <div className='space-y-8px'>
+                  <div className='text-13px font-500 text-t-secondary'>{t('settings.modelProtocol')}</div>
+                  <Select
+                    value={modelProtocol}
+                    onChange={setModelProtocol}
+                    options={NEW_API_PROTOCOL_OPTIONS}
+                    triggerProps={{ getPopupContainer: (node) => node.parentElement || document.body }}
+                  />
+                  <div className='text-11px text-t-secondary leading-4'>{t('settings.modelProtocolTip')}</div>
+                </div>
+              )}
 
-          <div className='space-y-8px'>
-            <div className='flex items-center gap-5px text-13px font-500 text-t-secondary'>
-              <PreviewOpen theme='outline' size='14' />
-              <span>{t('settings.imageInput')}</span>
-            </div>
-            <Select
-              value={imageInput}
-              onChange={(value) => setImageInput(value as ModelImageInputChoice)}
-              options={[
-                { label: t('settings.imageInputAuto'), value: 'auto' },
-                { label: t('settings.imageInputSupported'), value: 'supported' },
-                { label: t('settings.imageInputUnsupported'), value: 'unsupported' },
-              ]}
-            />
-            <div className='text-11px text-t-secondary leading-4'>{t('settings.imageInputTip')}</div>
-          </div>
+              <div className='space-y-8px'>
+                <div className='flex items-center gap-5px text-13px font-500 text-t-secondary'>
+                  <PreviewOpen theme='outline' size='14' />
+                  <span>{t('settings.imageInput')}</span>
+                </div>
+                <Select
+                  value={imageInput}
+                  onChange={(value) => setImageInput(value as ModelImageInputChoice)}
+                  options={[
+                    { label: t('settings.imageInputAuto'), value: 'auto' },
+                    { label: t('settings.imageInputSupported'), value: 'supported' },
+                    { label: t('settings.imageInputUnsupported'), value: 'unsupported' },
+                  ]}
+                />
+                <div className='text-11px text-t-secondary leading-4'>{t('settings.imageInputTip')}</div>
+              </div>
 
-          {showOpenAiApiMode && (
-            <div className='space-y-8px'>
-              <div className='text-13px font-500 text-t-secondary'>{t('settings.openAiApiMode')}</div>
-              <Select
-                value={openAiApiMode}
-                onChange={(value) => setOpenAiApiMode(value as ModelOpenAiApiModeChoice)}
-                options={[
-                  { label: t('settings.modelSettingAuto'), value: 'auto' },
-                  { label: t('settings.openAiApiModeChatCompletions'), value: 'chat_completions' },
-                  { label: t('settings.openAiApiModeResponses'), value: 'responses' },
-                ]}
-              />
-              <div className='text-11px text-t-secondary leading-4'>{t('settings.openAiApiModeTip')}</div>
-            </div>
-          )}
+              {showOpenAiApiMode && !modelSettings.forceChatCompletions && (
+                <div className='space-y-8px'>
+                  <div className='text-13px font-500 text-t-secondary'>{t('settings.openAiApiMode')}</div>
+                  <Select
+                    value={openAiApiMode}
+                    onChange={(value) => setOpenAiApiMode(value as ModelOpenAiApiModeChoice)}
+                    options={[
+                      { label: t('settings.modelSettingAuto'), value: 'auto' },
+                      { label: t('settings.openAiApiModeChatCompletions'), value: 'chat_completions' },
+                      { label: t('settings.openAiApiModeResponses'), value: 'responses' },
+                    ]}
+                  />
+                  <div className='text-11px text-t-secondary leading-4'>{t('settings.openAiApiModeTip')}</div>
+                </div>
+              )}
 
-          {!isEditing && models.length > 1 && (
-            <div className='text-11px text-t-secondary leading-4'>{t('settings.modelSettingsApplyToSelected')}</div>
+              {!isEditing && models.length > 1 && (
+                <div className='text-11px text-t-secondary leading-4'>{t('settings.modelSettingsApplyToSelected')}</div>
+              )}
+            </>
           )}
         </div>
       </AionModal>

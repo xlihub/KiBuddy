@@ -41,10 +41,11 @@ const useModeModeList = (
     access_key_id?: string;
     secret_access_key?: string;
     profile?: string;
-  }
+  },
+  enabled = true
 ) => {
   return useSWR(
-    [platform + '/models', { platform, base_url, api_key, try_fix, bedrock_config }],
+    enabled ? [platform + '/models', { platform, base_url, api_key, try_fix, bedrock_config }] : null,
     async ([_url, { platform, base_url, api_key, try_fix, bedrock_config }]): Promise<{
       models: { label: string; value: string }[];
       fix_base_url?: string;

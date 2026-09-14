@@ -1,4 +1,4 @@
 interface:
   display_name: 'Ki 发布维护'
-  short_description: '只读检查 Ki 双仓发布状态、上游候选版本、兼容性与恢复入口'
-  default_prompt: '使用 $ki-release-maintenance 检查 Ki 双仓当前发布状态并规划发布基准。'
+  short_description: '只读检查 Ki 产品三仓版本、上游候选、SDK 来源与恢复入口'
+  default_prompt: '使用 $ki-release-maintenance 检查相关 Ki 产品当前发布状态与 SDK 来源并规划发布基准。'

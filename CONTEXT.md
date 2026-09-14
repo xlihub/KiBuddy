@@ -5,7 +5,7 @@
 ## 发布语言
 
 **上游候选版本**：
-已经完整发布、可供管理员评估，但尚未被 Ki 产品接受的 AionCore 或 AionUi 正式版本。候选版本不会自动触发同步或 Ki 产品发布。
+已经完整发布、可供管理员评估，但尚未被 Ki 产品接受的 aionrs、AionCore 或 AionUi 正式版本。候选版本不会自动触发同步或 Ki 产品发布。
 _Avoid_：待同步版本、最新必跟版本
 
 **发布基准**：
@@ -13,7 +13,7 @@ _Avoid_：待同步版本、最新必跟版本
 _Avoid_：最新上游、默认版本
 
 **独立发布节奏**：
-Ki-Core 与 Ki-Buddy 根据自身产品计划决定发布时间和版本号，上游发布只提供候选版本。
+Ki-Model、Ki-Core 与 Ki-Buddy 根据自身产品计划决定发布时间和版本号，上游发布只提供候选版本。
 _Avoid_：延迟一周同步、跟随上游发布
 
 **通用产品公开分发源**：
@@ -21,7 +21,7 @@ _Avoid_：延迟一周同步、跟随上游发布
 _Avoid_：GitHub public Release、项目交付渠道、源码仓库
 
 **Ki 产品源码边界**：
-由 standalone private `KiBuddy` 与 public fork `Ki-Core` 组成的并列源码边界；两者分别跟随自己的 public upstream，保留独立历史、版本和发布节奏，不组成 monorepo 或源码包含关系。
+由 standalone private `KiBuddy`、public fork `Ki-Core` 与 SDK fork `Ki-Model` 组成的并列源码边界；分别维护桌面、服务端与模型 SDK，保留独立历史和版本，不组成 monorepo。
 _Avoid_：KiBuddy monorepo、private `KiCore`、Git submodule
 
 **通用产品源码仓库**：
@@ -151,6 +151,28 @@ _Avoid_：项目身份模式、AionPro 用户类型、第三方账户类型
 **外部身份 namespace**：
 远期 `external` 项目身份投影使用的稳定提供方与租户边界，由 `providerId` 及 issuer/tenant 共同标识；同一 `distributionId` 生命周期内保持不变。
 _Avoid_：username、角色名称、服务地址
+
+## 项目模型
+
+**模型协议适配类型**：
+按消息与响应协议区分的模型服务接入类型；多个项目模型连接可以采用同一类型，网关鉴权、地址或私有化部署方式本身不决定类型。
+_Avoid_：客户名称、模型 ID、部署地址
+
+**模型网关配置**：
+在既有模型协议下，为一个模型连接指定的可选请求与网络设置，包括请求头、鉴权方式和连接策略；它不改变模型消息协议，也不代表新的模型协议适配类型。
+_Avoid_：客户专属 provider、任意协议编辑器
+
+**模型 SDK 源码仓库**：
+公开 fork `xlihub/Ki-Model`，以 aionrs 为上游，维护模型协议与网关请求扩展并提供固定 SDK 版本供 Ki-Core 消费。
+_Avoid_：Ki-Core 子目录、客户模型服务、独立客户 CLI
+
+**项目模型预设**：
+项目分发版本提供的非敏感默认模型连接配置；用户录入凭据后使用，并可修改地址和模型。预设本身不包含运行时凭据。
+_Avoid_：随包密钥、不可修改的模型配置、通用自定义连接表单
+
+**项目模型连接**：
+用户依据项目模型预设配置后实际使用的模型连接，其当前配置由用户维护，与安装包携带的预设分离。
+_Avoid_：项目模型预设、安装包默认值
 
 ## 产品与身份
 

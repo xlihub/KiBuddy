@@ -1,3 +1,4 @@
+import { KiBuddyModelPresetInitialization, persistKiBuddyProvider } from '@/renderer/pages/ki-buddy/ModelSettings';
 /**
  * @license
  * Copyright 2025 AionUi (aionui.com)
@@ -125,6 +126,7 @@ const ModelModalContent: React.FC = () => {
    */
   const persistPlatform = async (platform: IProvider): Promise<void> => {
     const existing = (data || []).some((item) => item.id === platform.id);
+    if (await persistKiBuddyProvider(platform, existing)) return;
     if (existing) {
       const { id, ...body } = platform;
       await ipcBridge.mode.updateProvider.invoke({ id, ...body });
@@ -142,14 +144,15 @@ const ModelModalContent: React.FC = () => {
     // Optimistic update
     void mutate(nextArray, false);
 
-    persistPlatform(platform)
+    return persistPlatform(platform)
       .then(() => {
         void mutate();
         success();
+        return true;
       })
       .catch((error) => {
         void mutate();
-        console.error('Failed to save provider:', error);
+        // Persistence errors may contain request details; only show a generic message.
         // 409 Conflict — duplicate id (rare pre-launch); different toast
         const msg = error instanceof Error ? error.message : String(error);
         if (msg.includes('409')) {
@@ -157,6 +160,7 @@ const ModelModalContent: React.FC = () => {
         } else {
           message.error(t('settings.saveModelConfigFailed'));
         }
+        return false;
       });
   };
 
@@ -311,7 +315,7 @@ const ModelModalContent: React.FC = () => {
 
   const [addPlatformModalCtrl, addPlatformModalContext] = AddPlatformModal.useModal({
     onSubmit(platform) {
-      updatePlatform(platform, () => {
+      return updatePlatform(platform, () => {
         setCollapseKey((prev) => ({ ...prev, [platform.id]: true }));
         addPlatformModalCtrl.close();
       });
@@ -328,7 +332,7 @@ const ModelModalContent: React.FC = () => {
 
   const [addModelModalCtrl, addModelModalContext] = AddModelModal.useModal({
     onSubmit(platform) {
-      updatePlatform(platform, () => {
+      return updatePlatform(platform, () => {
         setCollapseKey((prev) => ({ ...prev, [platform.id]: true }));
         addModelModalCtrl.close();
       });
@@ -337,7 +341,7 @@ const ModelModalContent: React.FC = () => {
 
   const [editModalCtrl, editModalContext] = EditModeModal.useModal({
     onChange(platform) {
-      updatePlatform(platform, () => editModalCtrl.close());
+      return updatePlatform(platform, () => editModalCtrl.close());
     },
   });
 
@@ -380,6 +384,7 @@ const ModelModalContent: React.FC = () => {
           : 'flex flex-col bg-2 rd-16px px-16px md:px-24px lg:px-28px py-16px md:py-18px'
       }
     >
+      <KiBuddyModelPresetInitialization providers={data} refresh={mutate} />
       {messageContext}
       {addPlatformModalContext}
       {editModalContext}
