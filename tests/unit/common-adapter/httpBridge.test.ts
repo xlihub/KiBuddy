@@ -89,6 +89,19 @@ describe('httpBridge', () => {
     setHttpRequestTransport(null);
   });
 
+  it('does not log opaque credential maps even when header names have no sensitive keyword', async () => {
+    const debug = vi.spyOn(console, 'debug').mockImplementation(() => {});
+    vi.stubGlobal(
+      'fetch',
+      vi.fn().mockResolvedValue(new Response('{}', { headers: { 'Content-Type': 'application/json' } }))
+    );
+    await httpRequest('POST', '/api/providers', {
+      header_credentials: { 'X-Unusual': { action: 'replace', value: 'synthetic-private-header' } },
+    });
+    expect(JSON.stringify(debug.mock.calls)).not.toContain('synthetic-private-header');
+    debug.mockRestore();
+  });
+
   describe('getBaseUrl', () => {
     it('returns fallback URL in node environment with no globalThis.__backendPort', () => {
       const result = getBaseUrl();

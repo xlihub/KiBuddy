@@ -192,20 +192,20 @@
   },
   "kiCore": {
     "repository": "xlihub/Ki-Core",
-    "tag": "ki-core-v0.1.4",
-    "commit": "3c4055eb65b7b9d1f2f80ce6008bdf1dae9469cc",
+    "tag": "ki-core-v0.1.5",
+    "commit": "d0fddf5ffcee9cacaebde05e2914beac27f93a2a",
     "aionCore": {
       "repository": "iOfficeAI/AionCore",
       "tag": "v0.1.72",
       "peeledCommit": "57a34cc1b1a3b17bcc023de06b9e6768fceac36f"
     },
     "checksums": {
-      "macos-x64": "258570bdb23bc519ca31ddaab65515a77aeea0dc485ec418ea3acbf29dabb270",
-      "macos-arm64": "95d91e02ee3c4da693e7c51ecfa6b732176e8bea92bb028990da6de9033941c9",
-      "linux-x64": "9c835ed206e85b4285486bf8bed7d1acfdfdaacc149822f310305a785977a617",
-      "linux-arm64": "2776ddb271261498ec37b10817ee77af2db5f1b49afcacdd5c183f3d234c8d9a",
-      "windows-x64": "f596000c538c94257988c69c28635d2a1a80e26d01ebdfb619d04e94adea21ec",
-      "windows-arm64": "281a5ee61d81a1368b52f1cb5fa5a05aa0b9b0b7eedfb12b8a713c0625f0bf90"
+      "macos-x64": "4cc0e90009f01e0e4a30beb6ed71d240dfa683ec16c3fd73fe33491504d13276",
+      "macos-arm64": "b828ed54ea079fbfd48fe7fe5ce43f8e883caa31acc0430a852a5c6f9a186e1a",
+      "linux-x64": "7c78d6136e710941099f17152b350011da66df97b9b1fa505f77192c3817b4dc",
+      "linux-arm64": "a592803260b2b8ea9a0b40d076040b5d4994fc83d8635b1402ef1cad19ad2c74",
+      "windows-x64": "92f9e5c9265efc7fa13a4a5186383ad1faec6df58a2c28290a01f8c4e21a0b0b",
+      "windows-arm64": "e6ffdd124ef05e5d58ac366f54ee14306ec6e63e5cb08efa9fbff642ccd998fb"
     }
   }
 }

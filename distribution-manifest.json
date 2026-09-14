@@ -1,10 +1,10 @@
 {
   "schemaVersion": 2,
   "distributionId": "zxjt",
-  "version": "0.1.0",
+  "version": "0.1.1",
   "baseline": {
     "repository": "xlihub/KiBuddy",
-    "commit": "04986103f84f1431db45c2793d982d70879529f7"
+    "commit": "769eb9a29825119e2a8d82c249e5645ba2e717bf"
   },
   "brand": {
     "productName": "Ki-Buddy",
@@ -23,5 +23,18 @@
     "ico": "resources/ki-buddy/zxjt/app.ico",
     "icns": "resources/ki-buddy/zxjt/app.icns"
   },
-  "nonSensitiveConfig": {}
+  "nonSensitiveConfig": {
+    "modelPreset": {
+      "id": "zxjt-custom-model",
+      "name": "项目模型",
+      "endpoint": "http://10.16.192.68/inner/ai/llm/chat",
+      "modelIds": ["qwen3.8-27b-zxjt"],
+      "headerNames": ["appId", "secretKey", "apikey"],
+      "manual": true,
+      "protocol": "chat_completions",
+      "bearer": false,
+      "proxy": "direct",
+      "streamOptions": true
+    }
+  }
 }

@@ -832,46 +832,60 @@ describe('project distribution build contract', () => {
     }
   );
 
-  it('does not publish verified output when the installed Windows application fails validation', () => {
-    const directory = mkdtempSync(resolvePath(tmpdir(), 'project-windows-verification-failure-'));
-    const artifactsRoot = resolvePath(directory, 'artifacts');
-    const outputDirectory = resolvePath(directory, 'verified');
-    const plan = createMultiPlatformFormalPlan();
-    let cleanupCalled = false;
-    try {
-      mkdirSync(artifactsRoot, { recursive: true });
-      writeFileSync(resolvePath(artifactsRoot, 'ki-buddy-zxjt.exe'), 'formal installer');
-      writeFileSync(resolvePath(artifactsRoot, 'project-build-evidence.json'), 'immutable evidence');
+  it.each([
+    { validationFails: true, cleanupFails: false },
+    { validationFails: true, cleanupFails: true },
+    { validationFails: false, cleanupFails: true },
+  ])(
+    'preserves failures and publishes no output with $validationFails validation / $cleanupFails cleanup',
+    ({ validationFails, cleanupFails }) => {
+      const directory = mkdtempSync(resolvePath(tmpdir(), 'project-windows-verification-failure-'));
+      const artifactsRoot = resolvePath(directory, 'artifacts');
+      const outputDirectory = resolvePath(directory, 'verified');
+      const plan = createMultiPlatformFormalPlan();
+      let cleanupCalled = false;
+      try {
+        mkdirSync(artifactsRoot, { recursive: true });
+        writeFileSync(resolvePath(artifactsRoot, 'ki-buddy-zxjt.exe'), 'formal installer');
+        writeFileSync(resolvePath(artifactsRoot, 'project-build-evidence.json'), 'immutable evidence');
 
-      expect(() =>
-        verifyProjectDistributionArtifact({
-          buildPlan: plan,
-          projectRoot: process.cwd(),
-          artifactsRoot,
-          platform: 'windows-arm64',
-          outputDirectory,
-          materializeInstaller() {
-            return {
-              unpackedPath: resolvePath(directory, 'installed'),
-              cleanup() {
-                cleanupCalled = true;
-              },
-            };
-          },
-          verifyUnpacked() {
-            return { buildEvidencePath: resolvePath(artifactsRoot, 'project-build-evidence.json') };
-          },
-          verifyWindowsInstallation() {
-            throw new Error('Windows installation verification failed');
-          },
-        })
-      ).toThrow('Windows installation verification failed');
-      expect(cleanupCalled).toBe(true);
-      expect(existsSync(outputDirectory)).toBe(false);
-    } finally {
-      rmSync(directory, { recursive: true, force: true });
+        expect(() =>
+          verifyProjectDistributionArtifact({
+            buildPlan: plan,
+            projectRoot: process.cwd(),
+            artifactsRoot,
+            platform: 'windows-arm64',
+            outputDirectory,
+            materializeInstaller() {
+              return {
+                unpackedPath: resolvePath(directory, 'installed'),
+                cleanup() {
+                  cleanupCalled = true;
+                  if (cleanupFails) throw new Error('installer cleanup failed');
+                },
+              };
+            },
+            verifyUnpacked() {
+              return { buildEvidencePath: resolvePath(artifactsRoot, 'project-build-evidence.json') };
+            },
+            verifyWindowsInstallation() {
+              if (validationFails) throw new Error('Windows installation verification failed');
+            },
+          })
+        ).toThrow(
+          validationFails
+            ? cleanupFails
+              ? /Windows installation verification failed[\s\S]*installer cleanup failed/
+              : /Windows installation verification failed/
+            : /installer cleanup failed/
+        );
+        expect(cleanupCalled).toBe(true);
+        expect(existsSync(outputDirectory)).toBe(false);
+      } finally {
+        rmSync(directory, { recursive: true, force: true });
+      }
     }
-  });
+  );
 
   it('cleans materialized installer contents when packaged verification fails', () => {
     const directory = mkdtempSync(resolvePath(tmpdir(), 'project-installer-verification-failure-'));
@@ -1199,6 +1213,32 @@ describe('project distribution build contract', () => {
       ).toThrowError(/nonSensitiveConfig.*sensitive key/i);
     }
   );
+
+  it.each([true, false])('allows the non-sensitive model preset bearer switch %s', (bearer) => {
+    const registry = createRegistration({
+      allowed: { ...createRegistration().registrations[0].allowed, nonSensitiveConfigKeys: ['modelPreset'] },
+    });
+    const nonSensitiveConfig = { modelPreset: { bearer } };
+
+    expect(
+      resolve({ registry, manifest: createManifest({ nonSensitiveConfig }) }).productConfig.distribution
+        .nonSensitiveConfig
+    ).toEqual(nonSensitiveConfig);
+  });
+
+  it.each([
+    { modelPreset: { bearer: 'credential' } },
+    { modelPreset: { bearer: { value: 'credential' } } },
+    { modelPreset: { bearer: ['credential'] } },
+    { modelPreset: { nested: { bearer: false } } },
+    { unrelated: { bearer: false } },
+    { bearer: false },
+    { modelPreset: { bearer: false, apiKey: 'credential' } },
+  ])('rejects credentials and bearer fields outside the boolean preset option: %j', (nonSensitiveConfig) => {
+    expect(() => resolve({ manifest: createManifest({ nonSensitiveConfig }) })).toThrowError(
+      /nonSensitiveConfig.*sensitive key/i
+    );
+  });
 
   it('rejects harmless-looking configuration that is not allowed by the trusted registration', () => {
     expect(() => resolve({ manifest: createManifest({ nonSensitiveConfig: { deployment: 'local' } }) })).toThrowError(

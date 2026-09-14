@@ -297,7 +297,9 @@ function requireNonSensitiveConfig(value, label = 'Project manifest nonSensitive
   const record = requireRecord(value, label);
   for (const [key, child] of Object.entries(record)) {
     const childPath = [...pathParts, key];
-    if (SENSITIVE_KEY_PATTERN.test(key)) {
+    const isModelPresetBearerOption =
+      pathParts.length === 1 && pathParts[0] === 'modelPreset' && key === 'bearer' && typeof child === 'boolean';
+    if (SENSITIVE_KEY_PATTERN.test(key) && !isModelPresetBearerOption) {
       throw new Error(`${label} contains sensitive key ${childPath.join('.')}`);
     }
     if (child && typeof child === 'object') {
@@ -1083,6 +1085,8 @@ function verifyProjectDistributionArtifact({
     platform,
     buildPlan.packagingIdentity
   );
+  let verificationError;
+  let verificationFailed = false;
   try {
     const verification = (verifyUnpacked ?? unpackedVerification.verifyKiBuddyUnpacked)(
       path.resolve(projectRoot),
@@ -1103,9 +1107,22 @@ function verifyProjectDistributionArtifact({
     if (!fs.readFileSync(standaloneEvidencePath).equals(fs.readFileSync(verification.buildEvidencePath))) {
       throw new Error('Standalone project build evidence does not match the packaged evidence');
     }
-  } finally {
-    materialized.cleanup();
+  } catch (error) {
+    verificationError = error;
+    verificationFailed = true;
   }
+  try {
+    materialized.cleanup();
+  } catch (cleanupError) {
+    if (verificationFailed) {
+      throw new AggregateError(
+        [verificationError, cleanupError],
+        `Artifact verification failed: ${String(verificationError)}; installer cleanup failed: ${String(cleanupError)}`
+      );
+    }
+    throw cleanupError;
+  }
+  if (verificationFailed) throw verificationError;
   fs.mkdirSync(path.join(outputDirectory, 'installers'), { recursive: true });
   const copiedInstallerPath = path.join(outputDirectory, 'installers', path.basename(installerPath));
   fs.copyFileSync(installerPath, copiedInstallerPath);

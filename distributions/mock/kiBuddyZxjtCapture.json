@@ -1,0 +1,874 @@
+{
+  "schemaVersion": 1,
+  "sourceZipSha256": "0c6af895c89e2d64f07b2ba19e667fa254d4259e761237d7c069b0cdc5a9fe7e",
+  "scriptSha256": "7959c2737eb1828415c99fbe72718ac7a2bb3340d2c6837209fa45f42fc2b496",
+  "cases": {
+    "baseline-json": {
+      "httpStatus": 200,
+      "contentType": "application/json; charset=utf-8",
+      "body": "{\"id\":\"chatcmpl-d13870dfb2e79958499657acaf8e7b47\",\"object\":\"chat.completion\",\"created\":1789351432,\"model\":\"qwen3.8-27b\",\"choices\":[{\"index\":0,\"message\":{\"role\":\"assistant\",\"content\":\"ZXJT_PROBE_OK\",\"reasoning\":null},\"logprobs\":null,\"finish_reason\":\"stop\",\"stop_reason\":null,\"token_ids\":null}],\"usage\":{\"prompt_tokens\":39,\"total_tokens\":45,\"completion_tokens\":6,\"prompt_tokens_details\":null},\"system_fingerprint\":null,\"prompt_logprobs\":null,\"prompt_token_ids\":null,\"kv_transfer_params\":null,\"ec_transfer_params\":null}",
+      "bodySha256": "81b8408492bbb6d8c197aefe66b6110c54f42b704dc6abcc55d5cc0fd477401d",
+      "headersMs": 403,
+      "elapsedMs": 404,
+      "reads": [
+        {
+          "AtMs": 404,
+          "EndOffset": 516
+        }
+      ],
+      "requestShape": {
+        "stream": false,
+        "headerNames": ["appId", "secretKey", "apikey"],
+        "optionNames": []
+      }
+    },
+    "auth-all_plus_bearer": {
+      "httpStatus": 200,
+      "contentType": "application/json; charset=utf-8",
+      "body": "{\"id\":\"chatcmpl-18665a48d9f3d58ef758dabbac7fd5ac\",\"object\":\"chat.completion\",\"created\":1789351432,\"model\":\"qwen3.8-27b\",\"choices\":[{\"index\":0,\"message\":{\"role\":\"assistant\",\"content\":\"ZXJT_PROBE_OK\",\"reasoning\":null},\"logprobs\":null,\"finish_reason\":\"stop\",\"stop_reason\":null,\"token_ids\":null}],\"usage\":{\"prompt_tokens\":39,\"total_tokens\":45,\"completion_tokens\":6,\"prompt_tokens_details\":null},\"system_fingerprint\":null,\"prompt_logprobs\":null,\"prompt_token_ids\":null,\"kv_transfer_params\":null,\"ec_transfer_params\":null}",
+      "bodySha256": "2c07958cec94609a85b7dcdf4fbde93eefc936b3564698c6c57941dcb2c4376a",
+      "headersMs": 307,
+      "elapsedMs": 307,
+      "reads": [
+        {
+          "AtMs": 307,
+          "EndOffset": 516
+        }
+      ],
+      "requestShape": {
+        "stream": false,
+        "headerNames": ["appId", "secretKey", "apikey", "Authorization"],
+        "optionNames": []
+      }
+    },
+    "auth-bearer_only": {
+      "httpStatus": 202,
+      "contentType": "application/json; charset=utf-8",
+      "body": "{\"errcode\":\"10005\",\"errmsg\":\"无权访问该服务:无权限访问该serviceid\"}",
+      "bodySha256": "0db1101bd342e6e3a3ed76660b5b62d3fd1fdfb77af89d39d86b4258e68b6418",
+      "headersMs": 3,
+      "elapsedMs": 3,
+      "reads": [
+        {
+          "AtMs": 3,
+          "EndOffset": 80
+        }
+      ],
+      "requestShape": {
+        "stream": false,
+        "headerNames": ["Authorization"],
+        "optionNames": []
+      }
+    },
+    "auth-omit_appId": {
+      "httpStatus": 200,
+      "contentType": "text/event-stream; charset=utf-8",
+      "body": "data:001|身份验证失败|qwen3.8-27b-zxjt|null\n\n",
+      "bodySha256": "75abd08efcb6b74b84bfde9e839ed919046c19d16bb013d8889c9c6d4b16dab0",
+      "headersMs": 4,
+      "elapsedMs": 4,
+      "reads": [
+        {
+          "AtMs": 4,
+          "EndOffset": 49
+        },
+        {
+          "AtMs": 4,
+          "EndOffset": 51
+        }
+      ],
+      "requestShape": {
+        "stream": false,
+        "headerNames": ["secretKey", "apikey"],
+        "optionNames": []
+      }
+    },
+    "auth-omit_secretKey": {
+      "httpStatus": 200,
+      "contentType": "text/event-stream; charset=utf-8",
+      "body": "data:001|身份验证失败|qwen3.8-27b-zxjt|null\n\n",
+      "bodySha256": "75abd08efcb6b74b84bfde9e839ed919046c19d16bb013d8889c9c6d4b16dab0",
+      "headersMs": 4,
+      "elapsedMs": 4,
+      "reads": [
+        {
+          "AtMs": 4,
+          "EndOffset": 5
+        },
+        {
+          "AtMs": 4,
+          "EndOffset": 51
+        }
+      ],
+      "requestShape": {
+        "stream": false,
+        "headerNames": ["appId", "apikey"],
+        "optionNames": []
+      }
+    },
+    "auth-omit_apikey": {
+      "httpStatus": 202,
+      "contentType": "application/json; charset=utf-8",
+      "body": "{\"errcode\":\"10005\",\"errmsg\":\"无权访问该服务:无权限访问该serviceid\"}",
+      "bodySha256": "0db1101bd342e6e3a3ed76660b5b62d3fd1fdfb77af89d39d86b4258e68b6418",
+      "headersMs": 3,
+      "elapsedMs": 3,
+      "reads": [
+        {
+          "AtMs": 3,
+          "EndOffset": 80
+        }
+      ],
+      "requestShape": {
+        "stream": false,
+        "headerNames": ["appId", "secretKey"],
+        "optionNames": []
+      }
+    },
+    "auth-none": {
+      "httpStatus": 202,
+      "contentType": "application/json; charset=utf-8",
+      "body": "{\"errcode\":\"10005\",\"errmsg\":\"无权访问该服务:无权限访问该serviceid\"}",
+      "bodySha256": "0db1101bd342e6e3a3ed76660b5b62d3fd1fdfb77af89d39d86b4258e68b6418",
+      "headersMs": 3,
+      "elapsedMs": 3,
+      "reads": [
+        {
+          "AtMs": 3,
+          "EndOffset": 80
+        }
+      ],
+      "requestShape": {
+        "stream": false,
+        "headerNames": [],
+        "optionNames": []
+      }
+    },
+    "baseline-stream": {
+      "httpStatus": 200,
+      "contentType": "text/event-stream; charset=utf-8",
+      "body": "data:{\"id\":\"chatcmpl-778ae7e73591e3524c6b5180ce407bc5\",\"object\":\"chat.completion.chunk\",\"created\":1789351433,\"model\":\"qwen3.8-27b\",\"choices\":[{\"index\":0,\"delta\":{\"role\":\"assistant\"}}]}\n\ndata:{\"id\":\"chatcmpl-778ae7e73591e3524c6b5180ce407bc5\",\"object\":\"chat.completion.chunk\",\"created\":1789351433,\"model\":\"qwen3.8-27b\",\"choices\":[{\"index\":0,\"delta\":{\"content\":\"ZX\"}}]}\n\ndata:{\"id\":\"chatcmpl-778ae7e73591e3524c6b5180ce407bc5\",\"object\":\"chat.completion.chunk\",\"created\":1789351433,\"model\":\"qwen3.8-27b\",\"choices\":[{\"index\":0,\"delta\":{\"content\":\"JT_PROBE\"}}]}\n\ndata:{\"id\":\"chatcmpl-778ae7e73591e3524c6b5180ce407bc5\",\"object\":\"chat.completion.chunk\",\"created\":1789351433,\"model\":\"qwen3.8-27b\",\"choices\":[{\"index\":0,\"delta\":{\"content\":\"_OK\"}}]}\n\ndata:{\"id\":\"chatcmpl-778ae7e73591e3524c6b5180ce407bc5\",\"object\":\"chat.completion.chunk\",\"created\":1789351433,\"model\":\"qwen3.8-27b\",\"choices\":[{\"index\":0,\"delta\":{},\"finish_reason\":\"stop\"}]}\n\ndata:{\"id\":\"chatcmpl-778ae7e73591e3524c6b5180ce407bc5\",\"object\":\"chat.completion.chunk\",\"created\":1789351433,\"model\":\"qwen3.8-27b\",\"choices\":[],\"usage\":{\"prompt_tokens\":39,\"total_tokens\":45,\"completion_tokens\":6,\"prompt_tokens_details\":null}}\n\ndata:[DONE]\n\n",
+      "bodySha256": "afb1858710c147967a8509800bcbf89596533b9360fe072d1b2030804e31da9b",
+      "headersMs": 298,
+      "elapsedMs": 423,
+      "reads": [
+        {
+          "AtMs": 298,
+          "EndOffset": 5
+        },
+        {
+          "AtMs": 309,
+          "EndOffset": 366
+        },
+        {
+          "AtMs": 309,
+          "EndOffset": 368
+        },
+        {
+          "AtMs": 358,
+          "EndOffset": 373
+        },
+        {
+          "AtMs": 369,
+          "EndOffset": 556
+        },
+        {
+          "AtMs": 420,
+          "EndOffset": 561
+        },
+        {
+          "AtMs": 422,
+          "EndOffset": 928
+        },
+        {
+          "AtMs": 423,
+          "EndOffset": 930
+        },
+        {
+          "AtMs": 423,
+          "EndOffset": 935
+        },
+        {
+          "AtMs": 423,
+          "EndOffset": 1174
+        },
+        {
+          "AtMs": 423,
+          "EndOffset": 1179
+        },
+        {
+          "AtMs": 423,
+          "EndOffset": 1185
+        },
+        {
+          "AtMs": 423,
+          "EndOffset": 1187
+        }
+      ],
+      "requestShape": {
+        "stream": true,
+        "headerNames": ["appId", "secretKey", "apikey"],
+        "optionNames": []
+      }
+    },
+    "tool-json": {
+      "httpStatus": 200,
+      "contentType": "application/json; charset=utf-8",
+      "body": "{\"id\":\"chatcmpl-79b96ce99bf082b323e5d2d53370bd10\",\"object\":\"chat.completion\",\"created\":1789351434,\"model\":\"qwen3.8-27b\",\"choices\":[{\"index\":0,\"message\":{\"role\":\"assistant\",\"content\":null,\"tool_calls\":[{\"id\":\"call_f74717ab3a47435db31a85c7\",\"type\":\"function\",\"function\":{\"name\":\"get_weather\",\"arguments\":\"{\\\"city\\\":\\\"Beijing\\\"}\"}}],\"reasoning\":null},\"logprobs\":null,\"finish_reason\":\"tool_calls\",\"stop_reason\":null,\"token_ids\":null}],\"usage\":{\"prompt_tokens\":331,\"total_tokens\":358,\"completion_tokens\":27,\"prompt_tokens_details\":null},\"system_fingerprint\":null,\"prompt_logprobs\":null,\"prompt_token_ids\":null,\"kv_transfer_params\":null,\"ec_transfer_params\":null}",
+      "bodySha256": "975c1931027ac372f1dfdd8863e4f2279e87ef75e331143eefb8b3d5be222e36",
+      "headersMs": 1215,
+      "elapsedMs": 1215,
+      "reads": [
+        {
+          "AtMs": 1215,
+          "EndOffset": 657
+        }
+      ],
+      "requestShape": {
+        "stream": false,
+        "headerNames": ["appId", "secretKey", "apikey"],
+        "optionNames": []
+      }
+    },
+    "tool-json-roundtrip": {
+      "httpStatus": 200,
+      "contentType": "application/json; charset=utf-8",
+      "body": "{\"id\":\"chatcmpl-36a0858e74be47fb58527854e4879b12\",\"object\":\"chat.completion\",\"created\":1789351435,\"model\":\"qwen3.8-27b\",\"choices\":[{\"index\":0,\"message\":{\"role\":\"assistant\",\"content\":\"ZXJT_WEATHER_0153841934c9\\n</think>\\n\\nThe weather probe marker for Beijing is ZXJT_WEATHER_0153841934c9.\",\"reasoning\":null},\"logprobs\":null,\"finish_reason\":\"stop\",\"stop_reason\":null,\"token_ids\":null}],\"usage\":{\"prompt_tokens\":407,\"total_tokens\":453,\"completion_tokens\":46,\"prompt_tokens_details\":null},\"system_fingerprint\":null,\"prompt_logprobs\":null,\"prompt_token_ids\":null,\"kv_transfer_params\":null,\"ec_transfer_params\":null}",
+      "bodySha256": "3f5d3c37bcea46410feafdb681df357d31fa9b9b88ef5d95ae557e4e4b9f5682",
+      "headersMs": 1430,
+      "elapsedMs": 1430,
+      "reads": [
+        {
+          "AtMs": 1430,
+          "EndOffset": 611
+        }
+      ],
+      "requestShape": {
+        "stream": false,
+        "headerNames": ["appId", "secretKey", "apikey"],
+        "optionNames": []
+      }
+    },
+    "tool-stream": {
+      "httpStatus": 200,
+      "contentType": "text/event-stream; charset=utf-8",
+      "body": "data:{\"id\":\"chatcmpl-dbe8053632945cdaa9ffc34096a2fcac\",\"object\":\"chat.completion.chunk\",\"created\":1789351436,\"model\":\"qwen3.8-27b\",\"choices\":[{\"index\":0,\"delta\":{\"role\":\"assistant\"}}]}\n\ndata:{\"id\":\"chatcmpl-dbe8053632945cdaa9ffc34096a2fcac\",\"object\":\"chat.completion.chunk\",\"created\":1789351436,\"model\":\"qwen3.8-27b\",\"choices\":[{\"index\":0,\"delta\":{\"tool_calls\":[{\"index\":0,\"id\":\"call_9801678a35a548748ba9819b\",\"type\":\"function\",\"function\":{\"name\":\"get_weather\"}}]}}]}\n\ndata:{\"id\":\"chatcmpl-dbe8053632945cdaa9ffc34096a2fcac\",\"object\":\"chat.completion.chunk\",\"created\":1789351436,\"model\":\"qwen3.8-27b\",\"choices\":[{\"index\":0,\"delta\":{\"tool_calls\":[{\"index\":0,\"function\":{\"arguments\":\"{\\\"city\\\":\\\"Beijing\\\"}\"}}]}}]}\n\ndata:{\"id\":\"chatcmpl-dbe8053632945cdaa9ffc34096a2fcac\",\"object\":\"chat.completion.chunk\",\"created\":1789351436,\"model\":\"qwen3.8-27b\",\"choices\":[{\"index\":0,\"delta\":{},\"finish_reason\":\"tool_calls\"}]}\n\ndata:{\"id\":\"chatcmpl-dbe8053632945cdaa9ffc34096a2fcac\",\"object\":\"chat.completion.chunk\",\"created\":1789351436,\"model\":\"qwen3.8-27b\",\"choices\":[],\"usage\":{\"prompt_tokens\":331,\"total_tokens\":358,\"completion_tokens\":27,\"prompt_tokens_details\":null}}\n\ndata:[DONE]\n\n",
+      "bodySha256": "7b195e3c1889571cad54855d7cf6ff2a8da42301f64eae414706bdbc9e615b2f",
+      "headersMs": 264,
+      "elapsedMs": 1169,
+      "reads": [
+        {
+          "AtMs": 264,
+          "EndOffset": 186
+        },
+        {
+          "AtMs": 1166,
+          "EndOffset": 191
+        },
+        {
+          "AtMs": 1169,
+          "EndOffset": 467
+        },
+        {
+          "AtMs": 1169,
+          "EndOffset": 469
+        },
+        {
+          "AtMs": 1169,
+          "EndOffset": 474
+        },
+        {
+          "AtMs": 1169,
+          "EndOffset": 713
+        },
+        {
+          "AtMs": 1169,
+          "EndOffset": 718
+        },
+        {
+          "AtMs": 1169,
+          "EndOffset": 910
+        },
+        {
+          "AtMs": 1169,
+          "EndOffset": 1155
+        },
+        {
+          "AtMs": 1169,
+          "EndOffset": 1157
+        },
+        {
+          "AtMs": 1169,
+          "EndOffset": 1162
+        },
+        {
+          "AtMs": 1169,
+          "EndOffset": 1168
+        },
+        {
+          "AtMs": 1169,
+          "EndOffset": 1170
+        }
+      ],
+      "requestShape": {
+        "stream": true,
+        "headerNames": ["appId", "secretKey", "apikey"],
+        "optionNames": []
+      }
+    },
+    "tool-stream-roundtrip": {
+      "httpStatus": 200,
+      "contentType": "text/event-stream; charset=utf-8",
+      "body": "data:{\"id\":\"chatcmpl-2e8218ee7e46cfa5c1f4ff8e3979e711\",\"object\":\"chat.completion.chunk\",\"created\":1789351438,\"model\":\"qwen3.8-27b\",\"choices\":[{\"index\":0,\"delta\":{\"role\":\"assistant\"}}]}\n\ndata:{\"id\":\"chatcmpl-2e8218ee7e46cfa5c1f4ff8e3979e711\",\"object\":\"chat.completion.chunk\",\"created\":1789351438,\"model\":\"qwen3.8-27b\",\"choices\":[{\"index\":0,\"delta\":{\"content\":\"ZX\"}}]}\n\ndata:{\"id\":\"chatcmpl-2e8218ee7e46cfa5c1f4ff8e3979e711\",\"object\":\"chat.completion.chunk\",\"created\":1789351438,\"model\":\"qwen3.8-27b\",\"choices\":[{\"index\":0,\"delta\":{\"content\":\"JT_WEATHER\"}}]}\n\ndata:{\"id\":\"chatcmpl-2e8218ee7e46cfa5c1f4ff8e3979e711\",\"object\":\"chat.completion.chunk\",\"created\":1789351438,\"model\":\"qwen3.8-27b\",\"choices\":[{\"index\":0,\"delta\":{\"content\":\"_f5bd\"}}]}\n\ndata:{\"id\":\"chatcmpl-2e8218ee7e46cfa5c1f4ff8e3979e711\",\"object\":\"chat.completion.chunk\",\"created\":1789351438,\"model\":\"qwen3.8-27b\",\"choices\":[{\"index\":0,\"delta\":{\"content\":\"142\"}}]}\n\ndata:{\"id\":\"chatcmpl-2e8218ee7e46cfa5c1f4ff8e3979e711\",\"object\":\"chat.completion.chunk\",\"created\":1789351438,\"model\":\"qwen3.8-27b\",\"choices\":[{\"index\":0,\"delta\":{\"content\":\"81e\"}}]}\n\ndata:{\"id\":\"chatcmpl-2e8218ee7e46cfa5c1f4ff8e3979e711\",\"object\":\"chat.completion.chunk\",\"created\":1789351438,\"model\":\"qwen3.8-27b\",\"choices\":[{\"index\":0,\"delta\":{\"content\":\"05\\n\"}}]}\n\ndata:{\"id\":\"chatcmpl-2e8218ee7e46cfa5c1f4ff8e3979e711\",\"object\":\"chat.completion.chunk\",\"created\":1789351438,\"model\":\"qwen3.8-27b\",\"choices\":[{\"index\":0,\"delta\":{\"content\":\"</think>\"}}]}\n\ndata:{\"id\":\"chatcmpl-2e8218ee7e46cfa5c1f4ff8e3979e711\",\"object\":\"chat.completion.chunk\",\"created\":1789351438,\"model\":\"qwen3.8-27b\",\"choices\":[{\"index\":0,\"delta\":{\"content\":\"\\n\\nZXJT\"}}]}\n\ndata:{\"id\":\"chatcmpl-2e8218ee7e46cfa5c1f4ff8e3979e711\",\"object\":\"chat.completion.chunk\",\"created\":1789351438,\"model\":\"qwen3.8-27b\",\"choices\":[{\"index\":0,\"delta\":{\"content\":\"_WEATHER_f\"}}]}\n\ndata:{\"id\":\"chatcmpl-2e8218ee7e46cfa5c1f4ff8e3979e711\",\"object\":\"chat.completion.chunk\",\"created\":1789351438,\"model\":\"qwen3.8-27b\",\"choices\":[{\"index\":0,\"delta\":{\"content\":\"5bd1\"}}]}\n\ndata:{\"id\":\"chatcmpl-2e8218ee7e46cfa5c1f4ff8e3979e711\",\"object\":\"chat.completion.chunk\",\"created\":1789351438,\"model\":\"qwen3.8-27b\",\"choices\":[{\"index\":0,\"delta\":{\"content\":\"428\"}}]}\n\ndata:{\"id\":\"chatcmpl-2e8218ee7e46cfa5c1f4ff8e3979e711\",\"object\":\"chat.completion.chunk\",\"created\":1789351438,\"model\":\"qwen3.8-27b\",\"choices\":[{\"index\":0,\"delta\":{\"content\":\"1e0\"}}]}\n\ndata:{\"id\":\"chatcmpl-2e8218ee7e46cfa5c1f4ff8e3979e711\",\"object\":\"chat.completion.chunk\",\"created\":1789351438,\"model\":\"qwen3.8-27b\",\"choices\":[{\"index\":0,\"delta\":{\"content\":\"5\"}}]}\n\ndata:{\"id\":\"chatcmpl-2e8218ee7e46cfa5c1f4ff8e3979e711\",\"object\":\"chat.completion.chunk\",\"created\":1789351438,\"model\":\"qwen3.8-27b\",\"choices\":[{\"index\":0,\"delta\":{},\"finish_reason\":\"stop\"}]}\n\ndata:{\"id\":\"chatcmpl-2e8218ee7e46cfa5c1f4ff8e3979e711\",\"object\":\"chat.completion.chunk\",\"created\":1789351438,\"model\":\"qwen3.8-27b\",\"choices\":[],\"usage\":{\"prompt_tokens\":405,\"total_tokens\":439,\"completion_tokens\":34,\"prompt_tokens_details\":null}}\n\ndata:[DONE]\n\n",
+      "bodySha256": "6159527453a4a9c568eca0fbee6775cdbe8d7195fa4d467ac058fe3b22727605",
+      "headersMs": 253,
+      "elapsedMs": 1080,
+      "reads": [
+        {
+          "AtMs": 253,
+          "EndOffset": 186
+        },
+        {
+          "AtMs": 264,
+          "EndOffset": 368
+        },
+        {
+          "AtMs": 313,
+          "EndOffset": 373
+        },
+        {
+          "AtMs": 323,
+          "EndOffset": 558
+        },
+        {
+          "AtMs": 375,
+          "EndOffset": 743
+        },
+        {
+          "AtMs": 435,
+          "EndOffset": 926
+        },
+        {
+          "AtMs": 536,
+          "EndOffset": 1107
+        },
+        {
+          "AtMs": 546,
+          "EndOffset": 1109
+        },
+        {
+          "AtMs": 597,
+          "EndOffset": 1293
+        },
+        {
+          "AtMs": 659,
+          "EndOffset": 1481
+        },
+        {
+          "AtMs": 719,
+          "EndOffset": 1669
+        },
+        {
+          "AtMs": 832,
+          "EndOffset": 1857
+        },
+        {
+          "AtMs": 842,
+          "EndOffset": 1859
+        },
+        {
+          "AtMs": 893,
+          "EndOffset": 1864
+        },
+        {
+          "AtMs": 904,
+          "EndOffset": 2041
+        },
+        {
+          "AtMs": 904,
+          "EndOffset": 2043
+        },
+        {
+          "AtMs": 954,
+          "EndOffset": 2048
+        },
+        {
+          "AtMs": 965,
+          "EndOffset": 2226
+        },
+        {
+          "AtMs": 1015,
+          "EndOffset": 2231
+        },
+        {
+          "AtMs": 1026,
+          "EndOffset": 2409
+        },
+        {
+          "AtMs": 1077,
+          "EndOffset": 2414
+        },
+        {
+          "AtMs": 1080,
+          "EndOffset": 2590
+        },
+        {
+          "AtMs": 1080,
+          "EndOffset": 2595
+        },
+        {
+          "AtMs": 1080,
+          "EndOffset": 2781
+        },
+        {
+          "AtMs": 1080,
+          "EndOffset": 3004
+        },
+        {
+          "AtMs": 1080,
+          "EndOffset": 3028
+        },
+        {
+          "AtMs": 1080,
+          "EndOffset": 3033
+        },
+        {
+          "AtMs": 1080,
+          "EndOffset": 3039
+        },
+        {
+          "AtMs": 1080,
+          "EndOffset": 3041
+        }
+      ],
+      "requestShape": {
+        "stream": true,
+        "headerNames": ["appId", "secretKey", "apikey"],
+        "optionNames": []
+      }
+    },
+    "parameter-stream-options": {
+      "httpStatus": 200,
+      "contentType": "text/event-stream; charset=utf-8",
+      "body": "data:{\"id\":\"chatcmpl-abd7e5f6faf85a5ed8ea2570c87c789f\",\"object\":\"chat.completion.chunk\",\"created\":1789351439,\"model\":\"qwen3.8-27b\",\"choices\":[{\"index\":0,\"delta\":{\"role\":\"assistant\"}}]}\n\ndata:{\"id\":\"chatcmpl-abd7e5f6faf85a5ed8ea2570c87c789f\",\"object\":\"chat.completion.chunk\",\"created\":1789351439,\"model\":\"qwen3.8-27b\",\"choices\":[{\"index\":0,\"delta\":{\"content\":\"ZX\"}}]}\n\ndata:{\"id\":\"chatcmpl-abd7e5f6faf85a5ed8ea2570c87c789f\",\"object\":\"chat.completion.chunk\",\"created\":1789351439,\"model\":\"qwen3.8-27b\",\"choices\":[{\"index\":0,\"delta\":{\"content\":\"JT_PROBE\"}}]}\n\ndata:{\"id\":\"chatcmpl-abd7e5f6faf85a5ed8ea2570c87c789f\",\"object\":\"chat.completion.chunk\",\"created\":1789351439,\"model\":\"qwen3.8-27b\",\"choices\":[{\"index\":0,\"delta\":{\"content\":\"_OK\"}}]}\n\ndata:{\"id\":\"chatcmpl-abd7e5f6faf85a5ed8ea2570c87c789f\",\"object\":\"chat.completion.chunk\",\"created\":1789351439,\"model\":\"qwen3.8-27b\",\"choices\":[{\"index\":0,\"delta\":{},\"finish_reason\":\"stop\"}]}\n\ndata:{\"id\":\"chatcmpl-abd7e5f6faf85a5ed8ea2570c87c789f\",\"object\":\"chat.completion.chunk\",\"created\":1789351439,\"model\":\"qwen3.8-27b\",\"choices\":[],\"usage\":{\"prompt_tokens\":39,\"total_tokens\":45,\"completion_tokens\":6,\"prompt_tokens_details\":null}}\n\ndata:[DONE]\n\n",
+      "bodySha256": "712e461fbe5aa5c05e97f3364172e053078c68464a1ef90324cacecc113ba5b1",
+      "headersMs": 194,
+      "elapsedMs": 355,
+      "reads": [
+        {
+          "AtMs": 194,
+          "EndOffset": 184
+        },
+        {
+          "AtMs": 205,
+          "EndOffset": 366
+        },
+        {
+          "AtMs": 205,
+          "EndOffset": 368
+        },
+        {
+          "AtMs": 255,
+          "EndOffset": 554
+        },
+        {
+          "AtMs": 266,
+          "EndOffset": 556
+        },
+        {
+          "AtMs": 353,
+          "EndOffset": 928
+        },
+        {
+          "AtMs": 355,
+          "EndOffset": 930
+        },
+        {
+          "AtMs": 355,
+          "EndOffset": 1172
+        },
+        {
+          "AtMs": 355,
+          "EndOffset": 1174
+        },
+        {
+          "AtMs": 355,
+          "EndOffset": 1187
+        }
+      ],
+      "requestShape": {
+        "stream": true,
+        "headerNames": ["appId", "secretKey", "apikey"],
+        "optionNames": ["stream_options"]
+      }
+    },
+    "health-check-30s-max-tokens-16": {
+      "httpStatus": 200,
+      "contentType": "text/event-stream; charset=utf-8",
+      "body": "data:{\"id\":\"chatcmpl-00366e687f4a635228095f59a429da40\",\"object\":\"chat.completion.chunk\",\"created\":1789351439,\"model\":\"qwen3.8-27b\",\"choices\":[{\"index\":0,\"delta\":{\"role\":\"assistant\"}}]}\n\ndata:{\"id\":\"chatcmpl-00366e687f4a635228095f59a429da40\",\"object\":\"chat.completion.chunk\",\"created\":1789351439,\"model\":\"qwen3.8-27b\",\"choices\":[{\"index\":0,\"delta\":{\"content\":\"OK\"}}]}\n\ndata:{\"id\":\"chatcmpl-00366e687f4a635228095f59a429da40\",\"object\":\"chat.completion.chunk\",\"created\":1789351439,\"model\":\"qwen3.8-27b\",\"choices\":[{\"index\":0,\"delta\":{},\"finish_reason\":\"stop\"}]}\n\ndata:{\"id\":\"chatcmpl-00366e687f4a635228095f59a429da40\",\"object\":\"chat.completion.chunk\",\"created\":1789351439,\"model\":\"qwen3.8-27b\",\"choices\":[],\"usage\":{\"prompt_tokens\":35,\"total_tokens\":37,\"completion_tokens\":2,\"prompt_tokens_details\":null}}\n\ndata:[DONE]\n\n",
+      "bodySha256": "8938041e4d97f288a10f7780ea98d95dd359bbf2d0a81c17827c23bcb474e9fb",
+      "headersMs": 229,
+      "elapsedMs": 293,
+      "reads": [
+        {
+          "AtMs": 230,
+          "EndOffset": 186
+        },
+        {
+          "AtMs": 240,
+          "EndOffset": 366
+        },
+        {
+          "AtMs": 240,
+          "EndOffset": 368
+        },
+        {
+          "AtMs": 290,
+          "EndOffset": 373
+        },
+        {
+          "AtMs": 293,
+          "EndOffset": 559
+        },
+        {
+          "AtMs": 293,
+          "EndOffset": 564
+        },
+        {
+          "AtMs": 293,
+          "EndOffset": 803
+        },
+        {
+          "AtMs": 293,
+          "EndOffset": 814
+        },
+        {
+          "AtMs": 293,
+          "EndOffset": 816
+        }
+      ],
+      "requestShape": {
+        "stream": true,
+        "headerNames": ["appId", "secretKey", "apikey"],
+        "optionNames": ["max_tokens"]
+      }
+    },
+    "parameter-tool-choice-auto": {
+      "httpStatus": 200,
+      "contentType": "text/event-stream; charset=utf-8",
+      "body": "data:{\"id\":\"chatcmpl-02a8c9a5878b68bdc3c26e82ffb2f79c\",\"object\":\"chat.completion.chunk\",\"created\":1789351440,\"model\":\"qwen3.8-27b\",\"choices\":[{\"index\":0,\"delta\":{\"role\":\"assistant\"}}]}\n\ndata:{\"id\":\"chatcmpl-02a8c9a5878b68bdc3c26e82ffb2f79c\",\"object\":\"chat.completion.chunk\",\"created\":1789351440,\"model\":\"qwen3.8-27b\",\"choices\":[{\"index\":0,\"delta\":{\"tool_calls\":[{\"index\":0,\"id\":\"call_316d3b55c6064f22a78eec14\",\"type\":\"function\",\"function\":{\"name\":\"get_weather\"}}]}}]}\n\ndata:{\"id\":\"chatcmpl-02a8c9a5878b68bdc3c26e82ffb2f79c\",\"object\":\"chat.completion.chunk\",\"created\":1789351440,\"model\":\"qwen3.8-27b\",\"choices\":[{\"index\":0,\"delta\":{\"tool_calls\":[{\"index\":0,\"function\":{\"arguments\":\"{\\\"city\\\":\\\"Beijing\\\"}\"}}]}}]}\n\ndata:{\"id\":\"chatcmpl-02a8c9a5878b68bdc3c26e82ffb2f79c\",\"object\":\"chat.completion.chunk\",\"created\":1789351440,\"model\":\"qwen3.8-27b\",\"choices\":[{\"index\":0,\"delta\":{},\"finish_reason\":\"tool_calls\"}]}\n\ndata:{\"id\":\"chatcmpl-02a8c9a5878b68bdc3c26e82ffb2f79c\",\"object\":\"chat.completion.chunk\",\"created\":1789351440,\"model\":\"qwen3.8-27b\",\"choices\":[],\"usage\":{\"prompt_tokens\":331,\"total_tokens\":358,\"completion_tokens\":27,\"prompt_tokens_details\":null}}\n\ndata:[DONE]\n\n",
+      "bodySha256": "bce527296db07d513b8bce8c6afabe19d52cc736468422d4de9da692c6a8d351",
+      "headersMs": 342,
+      "elapsedMs": 898,
+      "reads": [
+        {
+          "AtMs": 342,
+          "EndOffset": 5
+        },
+        {
+          "AtMs": 352,
+          "EndOffset": 186
+        },
+        {
+          "AtMs": 895,
+          "EndOffset": 469
+        },
+        {
+          "AtMs": 898,
+          "EndOffset": 711
+        },
+        {
+          "AtMs": 898,
+          "EndOffset": 713
+        },
+        {
+          "AtMs": 898,
+          "EndOffset": 718
+        },
+        {
+          "AtMs": 898,
+          "EndOffset": 908
+        },
+        {
+          "AtMs": 898,
+          "EndOffset": 910
+        },
+        {
+          "AtMs": 898,
+          "EndOffset": 915
+        },
+        {
+          "AtMs": 898,
+          "EndOffset": 1157
+        },
+        {
+          "AtMs": 898,
+          "EndOffset": 1162
+        },
+        {
+          "AtMs": 898,
+          "EndOffset": 1170
+        }
+      ],
+      "requestShape": {
+        "stream": true,
+        "headerNames": ["appId", "secretKey", "apikey"],
+        "optionNames": ["tool_choice"]
+      }
+    },
+    "parameter-tool-choice-required": {
+      "httpStatus": 200,
+      "contentType": "text/event-stream; charset=utf-8",
+      "body": "data:{\"id\":\"chatcmpl-2e241ec55d6eea7bbd0c1e5d50b5811e\",\"object\":\"chat.completion.chunk\",\"created\":1789351441,\"model\":\"qwen3.8-27b\",\"choices\":[{\"index\":0,\"delta\":{\"role\":\"assistant\"}}]}\n\ndata:{\"id\":\"chatcmpl-2e241ec55d6eea7bbd0c1e5d50b5811e\",\"object\":\"chat.completion.chunk\",\"created\":1789351441,\"model\":\"qwen3.8-27b\",\"choices\":[{\"index\":0,\"delta\":{\"tool_calls\":[{\"index\":0,\"id\":\"call_1e7475323ecd4dfc96bab3f3\",\"type\":\"function\",\"function\":{\"name\":\"get_weather\"}}]}}]}\n\ndata:{\"id\":\"chatcmpl-2e241ec55d6eea7bbd0c1e5d50b5811e\",\"object\":\"chat.completion.chunk\",\"created\":1789351441,\"model\":\"qwen3.8-27b\",\"choices\":[{\"index\":0,\"delta\":{\"tool_calls\":[{\"index\":0,\"function\":{\"arguments\":\"{\\\"city\\\":\\\"Beijing\\\"}\"}}]}}]}\n\ndata:{\"id\":\"chatcmpl-2e241ec55d6eea7bbd0c1e5d50b5811e\",\"object\":\"chat.completion.chunk\",\"created\":1789351441,\"model\":\"qwen3.8-27b\",\"choices\":[{\"index\":0,\"delta\":{},\"finish_reason\":\"tool_calls\"}]}\n\ndata:{\"id\":\"chatcmpl-2e241ec55d6eea7bbd0c1e5d50b5811e\",\"object\":\"chat.completion.chunk\",\"created\":1789351441,\"model\":\"qwen3.8-27b\",\"choices\":[],\"usage\":{\"prompt_tokens\":331,\"total_tokens\":358,\"completion_tokens\":27,\"prompt_tokens_details\":null}}\n\ndata:[DONE]\n\n",
+      "bodySha256": "f5e67aa0ebaa99038d52fb924f05ed7996548fc1a033263a7cfb18a33168b1ca",
+      "headersMs": 1134,
+      "elapsedMs": 1876,
+      "reads": [
+        {
+          "AtMs": 1134,
+          "EndOffset": 5
+        },
+        {
+          "AtMs": 1145,
+          "EndOffset": 186
+        },
+        {
+          "AtMs": 1872,
+          "EndOffset": 191
+        },
+        {
+          "AtMs": 1875,
+          "EndOffset": 467
+        },
+        {
+          "AtMs": 1875,
+          "EndOffset": 711
+        },
+        {
+          "AtMs": 1875,
+          "EndOffset": 718
+        },
+        {
+          "AtMs": 1875,
+          "EndOffset": 908
+        },
+        {
+          "AtMs": 1875,
+          "EndOffset": 910
+        },
+        {
+          "AtMs": 1875,
+          "EndOffset": 915
+        },
+        {
+          "AtMs": 1875,
+          "EndOffset": 1157
+        },
+        {
+          "AtMs": 1875,
+          "EndOffset": 1170
+        }
+      ],
+      "requestShape": {
+        "stream": true,
+        "headerNames": ["appId", "secretKey", "apikey"],
+        "optionNames": ["tool_choice"]
+      }
+    },
+    "parameter-tool-choice-named": {
+      "httpStatus": 200,
+      "contentType": "text/event-stream; charset=utf-8",
+      "body": "data:Bad Request\n\n",
+      "bodySha256": "9201dec1ab0e7eae31067c6d313e3525ea4405158fc4f584a6088aac8c8eef40",
+      "headersMs": 49,
+      "elapsedMs": 49,
+      "reads": [
+        {
+          "AtMs": 49,
+          "EndOffset": 18
+        }
+      ],
+      "requestShape": {
+        "stream": true,
+        "headerNames": ["appId", "secretKey", "apikey"],
+        "optionNames": ["tool_choice"]
+      }
+    },
+    "parameter-parallel-tool-calls": {
+      "httpStatus": 200,
+      "contentType": "text/event-stream; charset=utf-8",
+      "body": "data:{\"id\":\"chatcmpl-4028ed84655d84d63496765adf2ce8d5\",\"object\":\"chat.completion.chunk\",\"created\":1789351443,\"model\":\"qwen3.8-27b\",\"choices\":[{\"index\":0,\"delta\":{\"role\":\"assistant\"}}]}\n\ndata:{\"id\":\"chatcmpl-4028ed84655d84d63496765adf2ce8d5\",\"object\":\"chat.completion.chunk\",\"created\":1789351443,\"model\":\"qwen3.8-27b\",\"choices\":[{\"index\":0,\"delta\":{\"tool_calls\":[{\"index\":0,\"id\":\"call_f80364faf2bb4524981a26b6\",\"type\":\"function\",\"function\":{\"name\":\"get_weather\"}}]}}]}\n\ndata:{\"id\":\"chatcmpl-4028ed84655d84d63496765adf2ce8d5\",\"object\":\"chat.completion.chunk\",\"created\":1789351443,\"model\":\"qwen3.8-27b\",\"choices\":[{\"index\":0,\"delta\":{\"tool_calls\":[{\"index\":0,\"function\":{\"arguments\":\"{\\\"city\\\":\\\"Beijing\\\"}\"}}]}}]}\n\ndata:{\"id\":\"chatcmpl-4028ed84655d84d63496765adf2ce8d5\",\"object\":\"chat.completion.chunk\",\"created\":1789351443,\"model\":\"qwen3.8-27b\",\"choices\":[{\"index\":0,\"delta\":{},\"finish_reason\":\"tool_calls\"}]}\n\ndata:{\"id\":\"chatcmpl-4028ed84655d84d63496765adf2ce8d5\",\"object\":\"chat.completion.chunk\",\"created\":1789351443,\"model\":\"qwen3.8-27b\",\"choices\":[],\"usage\":{\"prompt_tokens\":331,\"total_tokens\":358,\"completion_tokens\":27,\"prompt_tokens_details\":null}}\n\ndata:[DONE]\n\n",
+      "bodySha256": "861b6b18338ee206c7179708c29ba649dca2c9aa08d2a6a40dc64d5b97909951",
+      "headersMs": 309,
+      "elapsedMs": 1174,
+      "reads": [
+        {
+          "AtMs": 309,
+          "EndOffset": 5
+        },
+        {
+          "AtMs": 319,
+          "EndOffset": 164
+        },
+        {
+          "AtMs": 319,
+          "EndOffset": 186
+        },
+        {
+          "AtMs": 1171,
+          "EndOffset": 467
+        },
+        {
+          "AtMs": 1174,
+          "EndOffset": 469
+        },
+        {
+          "AtMs": 1174,
+          "EndOffset": 713
+        },
+        {
+          "AtMs": 1174,
+          "EndOffset": 908
+        },
+        {
+          "AtMs": 1174,
+          "EndOffset": 910
+        },
+        {
+          "AtMs": 1174,
+          "EndOffset": 1157
+        },
+        {
+          "AtMs": 1174,
+          "EndOffset": 1162
+        },
+        {
+          "AtMs": 1174,
+          "EndOffset": 1168
+        },
+        {
+          "AtMs": 1174,
+          "EndOffset": 1170
+        }
+      ],
+      "requestShape": {
+        "stream": true,
+        "headerNames": ["appId", "secretKey", "apikey"],
+        "optionNames": ["parallel_tool_calls"]
+      }
+    },
+    "parameter-reasoning-effort": {
+      "httpStatus": 200,
+      "contentType": "text/event-stream; charset=utf-8",
+      "body": "data:{\"id\":\"chatcmpl-45dd0743274737cd98caec395d90e97b\",\"object\":\"chat.completion.chunk\",\"created\":1789351444,\"model\":\"qwen3.8-27b\",\"choices\":[{\"index\":0,\"delta\":{\"role\":\"assistant\"}}]}\n\ndata:{\"id\":\"chatcmpl-45dd0743274737cd98caec395d90e97b\",\"object\":\"chat.completion.chunk\",\"created\":1789351444,\"model\":\"qwen3.8-27b\",\"choices\":[{\"index\":0,\"delta\":{\"content\":\"ZX\"}}]}\n\ndata:{\"id\":\"chatcmpl-45dd0743274737cd98caec395d90e97b\",\"object\":\"chat.completion.chunk\",\"created\":1789351444,\"model\":\"qwen3.8-27b\",\"choices\":[{\"index\":0,\"delta\":{\"content\":\"JT_PROBE\"}}]}\n\ndata:{\"id\":\"chatcmpl-45dd0743274737cd98caec395d90e97b\",\"object\":\"chat.completion.chunk\",\"created\":1789351444,\"model\":\"qwen3.8-27b\",\"choices\":[{\"index\":0,\"delta\":{\"content\":\"_OK\"}}]}\n\ndata:{\"id\":\"chatcmpl-45dd0743274737cd98caec395d90e97b\",\"object\":\"chat.completion.chunk\",\"created\":1789351444,\"model\":\"qwen3.8-27b\",\"choices\":[{\"index\":0,\"delta\":{},\"finish_reason\":\"stop\"}]}\n\ndata:{\"id\":\"chatcmpl-45dd0743274737cd98caec395d90e97b\",\"object\":\"chat.completion.chunk\",\"created\":1789351444,\"model\":\"qwen3.8-27b\",\"choices\":[],\"usage\":{\"prompt_tokens\":39,\"total_tokens\":45,\"completion_tokens\":6,\"prompt_tokens_details\":null}}\n\ndata:[DONE]\n\n",
+      "bodySha256": "32d195a0db1295657a119b05c6218267fe24ea8208f46fcedc59e7af651d3ec0",
+      "headersMs": 233,
+      "elapsedMs": 419,
+      "reads": [
+        {
+          "AtMs": 233,
+          "EndOffset": 5
+        },
+        {
+          "AtMs": 244,
+          "EndOffset": 186
+        },
+        {
+          "AtMs": 244,
+          "EndOffset": 191
+        },
+        {
+          "AtMs": 244,
+          "EndOffset": 368
+        },
+        {
+          "AtMs": 333,
+          "EndOffset": 556
+        },
+        {
+          "AtMs": 406,
+          "EndOffset": 739
+        },
+        {
+          "AtMs": 419,
+          "EndOffset": 744
+        },
+        {
+          "AtMs": 419,
+          "EndOffset": 928
+        },
+        {
+          "AtMs": 419,
+          "EndOffset": 930
+        },
+        {
+          "AtMs": 419,
+          "EndOffset": 935
+        },
+        {
+          "AtMs": 419,
+          "EndOffset": 1174
+        },
+        {
+          "AtMs": 419,
+          "EndOffset": 1179
+        },
+        {
+          "AtMs": 419,
+          "EndOffset": 1185
+        },
+        {
+          "AtMs": 419,
+          "EndOffset": 1187
+        }
+      ],
+      "requestShape": {
+        "stream": true,
+        "headerNames": ["appId", "secretKey", "apikey"],
+        "optionNames": ["reasoning_effort"]
+      }
+    },
+    "error-unknown-model": {
+      "httpStatus": 200,
+      "contentType": "text/event-stream; charset=utf-8",
+      "body": "data:模型名称错误，请确认后再重新调用\n\n",
+      "bodySha256": "34b71ee83d885487d2b60bcc9d9b440e3be16d167512c62a4dbe1f0f6a643c0c",
+      "headersMs": 4,
+      "elapsedMs": 4,
+      "reads": [
+        {
+          "AtMs": 4,
+          "EndOffset": 5
+        },
+        {
+          "AtMs": 4,
+          "EndOffset": 55
+        }
+      ],
+      "requestShape": {
+        "stream": false,
+        "headerNames": ["appId", "secretKey", "apikey"],
+        "optionNames": []
+      }
+    },
+    "network-comparison": {
+      "httpStatus": 200,
+      "contentType": "application/json; charset=utf-8",
+      "body": "{\"id\":\"chatcmpl-d3c4492fc5dcef6d4a373aaa5f022f14\",\"object\":\"chat.completion\",\"created\":1789351445,\"model\":\"qwen3.8-27b\",\"choices\":[{\"index\":0,\"message\":{\"role\":\"assistant\",\"content\":\"ZXJT_PROBE_OK\",\"reasoning\":null},\"logprobs\":null,\"finish_reason\":\"stop\",\"stop_reason\":null,\"token_ids\":null}],\"usage\":{\"prompt_tokens\":39,\"total_tokens\":45,\"completion_tokens\":6,\"prompt_tokens_details\":null},\"system_fingerprint\":null,\"prompt_logprobs\":null,\"prompt_token_ids\":null,\"kv_transfer_params\":null,\"ec_transfer_params\":null}",
+      "bodySha256": "dc0e1a627a679a34be9a6c3936d407cc1505af65756e4fb4d01815f867f32c67",
+      "headersMs": 541,
+      "elapsedMs": 541,
+      "reads": [
+        {
+          "AtMs": 541,
+          "EndOffset": 516
+        }
+      ],
+      "requestShape": {
+        "stream": false,
+        "headerNames": ["appId", "secretKey", "apikey"],
+        "optionNames": []
+      }
+    }
+  }
+}

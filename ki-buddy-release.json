@@ -12,9 +12,9 @@
     },
     "kiCore": {
       "repository": "xlihub/Ki-Core",
-      "version": "0.1.4",
-      "tag": "ki-core-v0.1.4",
-      "commit": "3c4055eb65b7b9d1f2f80ce6008bdf1dae9469cc",
+      "version": "0.1.5",
+      "tag": "ki-core-v0.1.5",
+      "commit": "d0fddf5ffcee9cacaebde05e2914beac27f93a2a",
       "aionCore": {
         "repository": "iOfficeAI/AionCore",
         "tag": "v0.1.72",

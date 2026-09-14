@@ -11,7 +11,7 @@
 - `resources`：分发分支内的非敏感品牌资源路径；界面产品名必须保持 `Ki-Buddy`。
 - `platforms.preview` / `platforms.formal`：可以从 Ki-Buddy 当前矩阵 `macos-x64`、`macos-arm64`、`windows-x64`、`windows-arm64`、`linux-x64`、`linux-arm64` 中分别选择；每项还必须在受信注册记录的对应 mode 中获准。普通项目包默认可配置三平台双架构的全部六项；`zxjt` 按上述首包策略缩小了各 mode 的平台集合。
 - `allowed.requiredPlatforms.preview` / `allowed.requiredPlatforms.formal`：由 `product/main` 的受信注册声明对应 mode 不得省略的平台，并且必须是 `allowed.platforms` 的子集。普通项目可以使用空数组；`zxjt` 的正式集合强制包含两个 Windows 架构，项目分支不能缩成单架构。
-- `nonSensitiveConfig`：键必须由受信注册的 `allowed.nonSensitiveConfigKeys` 明确允许，且只能包含随包公开的配置。`zxjt` 当前允许列表为空，因此该对象必须保持 `{}`。
+- `nonSensitiveConfig`：键必须由受信注册的 `allowed.nonSensitiveConfigKeys` 明确允许，且只能包含随包公开的配置。`zxjt` 获准使用 `modelPreset`，结构由产品 runtime 严格校验：`id`、`name`、`endpoint`、`modelIds`、`headerNames`、`manual`、`protocol`、`bearer`、`proxy`、`streamOptions`。仅记录非敏感默认值与请求头名称，不允许凭据；实际值由 `distribution/zxjt` 的清单维护。升级保留已有连接，恢复默认不清除凭据。
 - `allowed.buildCredentialNames`：声明正式构建可以请求的凭据名称，只记录名称，不保存凭据值。名称必须使用 `UPPER_SNAKE_CASE`；`zxjt` 当前为 `[]`，因此不能请求任何项目构建凭据。
 
 `.github/workflows/build-project-preview.yml` 先从 `product/main` 读取受信注册，再解析并固定 source SHA、注册 revision、manifest digest、baseline、`platforms.preview`、Ki-Core 来源和预览身份。验证完成前不会安装或执行项目分支代码，工作流也不读取正式环境凭据。预览 build 与 verify job 根据 `platforms.preview` 展开，并共同消费验证 job 生成的 immutable build plan；当前 `zxjt` 只选择 `macos-arm64`，因此在 `macos-14` 构建并验证一个 DMG。

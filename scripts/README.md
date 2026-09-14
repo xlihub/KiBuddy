@@ -35,6 +35,16 @@ electron-builder
 
 ## Native Module Rebuild Strategy
 
+### Ki-Buddy 凭据模块
+
+`electron-builder.yml` 的 `beforePack` hook 调用 `rebuildNativeModules.js` 导出的同名函数。在创建 ASAR 前，为目标平台与架构准备 `keytar`；同架构构建也执行。keytar 7.9.0 使用其 package metadata 声明的 N-API v3 预编译包，不能使用 Electron ABI 资产名下载。
+
+`afterPack.js` 通过共享的 `verifyPackagedKeytar` 检查 `app.asar.unpacked/node_modules/keytar/build/Release/keytar.node` 是否存在、ASAR 索引是否标记为 unpacked，并在 macOS 上用 `lipo -archs` 检查目标架构。文件缺失、架构不符或索引异常会终止打包。macOS 签名可能改变解包二进制的大小，因此不要求文件大小与签名前的索引记录相等。跨架构的 `afterPack` 不再删除或重建已准备的 keytar 文件；它们必须与 ASAR 创建时的文件索引保持一致。
+
+macOS DMG 重试根据生成的 electron-builder 配置及目标架构定位具体 `.app`，每次调用 `--prepackaged` 前对同一路径执行共享校验。校验失败会直接抛出错误，不等待或继续重试；有效应用仍可重试临时 DMG 制作失败。这样可避免 `--prepackaged` 跳过 hooks 后将凭据模块不完整的应用制作为安装包。
+
+回归验证：`bun run test tests/unit/assets/ki-buddy/nativeCredentials.test.ts tests/unit/assets/ki-buddy/dmgRetry.test.ts`。测试隔离下载、编译及 DMG 命令，覆盖文件缺失、错误架构、未安装依赖、真实 ASAR 索引与解包文件、产品和架构目录选择，以及重试退出条件；目标机器上的完整登录仍需用重新构建的安装包验收。
+
 ### `rebuildNativeModules.js` - Unified Rebuild Utility
 
 This is the core module that handles all native module rebuilding. It provides:
