@@ -139,4 +139,12 @@ describe('KiBuddy model settings adapter boundary', () => {
     view.rerender(<Harness />);
     expect(screen.getByText('discovery allowed')).toBeInTheDocument();
   });
+
+  it('preserves existing model settings when the optional gateway configuration is empty', () => {
+    read.mockReturnValue({ manual: false, gateway: {} });
+    render(<Harness />);
+    fireEvent.click(screen.getByText('save'));
+    expect(write).toHaveBeenCalledWith(record, { manual: false, gateway: {} });
+    expect(screen.getByText('discovery allowed')).toBeInTheDocument();
+  });
 });

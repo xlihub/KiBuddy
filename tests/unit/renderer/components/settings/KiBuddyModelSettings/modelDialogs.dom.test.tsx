@@ -267,4 +267,47 @@ describe('KiBuddy model dialogs', () => {
     await settleDetection();
     expect([mocks.fetch.mock.calls, mocks.detect.mock.calls]).toEqual([[], []]);
   });
+
+  it('restores discovery when a saved manual connection is changed to automatic mode', async () => {
+    const user = userEvent.setup();
+    const data = provider({ manual: true });
+    render(wrap(<EditModeModal data={data} modalProps={{ visible: true }} modalCtrl={{ close }} onChange={submit} />));
+    await user.click(screen.getByRole('switch', { name: 'settings.kiBuddyModel.manual' }));
+    await waitFor(() => expect(mocks.fetch).toHaveBeenCalled());
+    await user.click(screen.getByText('common.save'));
+    await waitFor(() =>
+      expect(submit).toHaveBeenCalledWith(
+        expect.objectContaining({ is_full_url: false, testOnlySettings: { manual: false } })
+      )
+    );
+  });
+
+  it('discards the private URL from a cancelled manual edit before restoring discovery', async () => {
+    const user = userEvent.setup();
+    const data = { ...provider(), is_full_url: false };
+    function Host() {
+      const [modal, context] = EditModeModal.useModal({ data, onChange: submit });
+      return (
+        <>
+          <button onClick={() => modal.open()}>open</button>
+          <button onClick={() => modal.close()}>hide</button>
+          {context}
+        </>
+      );
+    }
+    render(wrap(<Host />));
+    await user.click(screen.getByText('open'));
+    await waitFor(() => expect(mocks.fetch).toHaveBeenCalled());
+    await user.click(screen.getByRole('switch', { name: 'settings.kiBuddyModel.manual' }));
+    const url = screen.getByDisplayValue(data.base_url);
+    await user.clear(url);
+    await user.type(url, 'https://example.invalid/cancelled-private-chat');
+    await user.click(screen.getByText('hide'));
+    await user.click(screen.getByText('open'));
+    await settleDetection();
+    expect(screen.getByDisplayValue(data.base_url)).toBeInTheDocument();
+    expect(
+      mocks.fetch.mock.calls.every(([request]) => request.base_url !== 'https://example.invalid/cancelled-private-chat')
+    ).toBe(true);
+  });
 });

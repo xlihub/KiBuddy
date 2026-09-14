@@ -236,7 +236,7 @@ const AddPlatformModal = ModalHOC<{
   const [openAiApiMode, setOpenAiApiMode] = useState<ModelOpenAiApiModeChoice>('auto');
   const modelSettings = useKiBuddyModelSettings({ platform, visible: modalProps.visible });
   const [fullUrlInput, setIsFullUrl] = useState(false);
-  const isFullUrl = modelSettings.forceFullUrl || fullUrlInput;
+  const isFullUrl = modelSettings.fullUrlOverride ?? fullUrlInput;
   const showOpenAiApiMode = supportsOpenAiApiMode(platform, modelProtocol);
 
   // Auto-detect protocol when model changes (for new-api platforms). The model
@@ -527,7 +527,7 @@ const AddPlatformModal = ModalHOC<{
             A negative marginTop would overlap the Input's bottom edge and
             intercept clicks on its lower rim (see ELECTRON-1K4).
           */}
-          {(isCustom || isNewApi) && !isBedrock && !modelSettings.forceFullUrl && (
+          {(isCustom || isNewApi) && !isBedrock && modelSettings.fullUrlOverride !== true && (
             <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginTop: 4, marginBottom: 12 }}>
               <Switch size='small' checked={isFullUrl} onChange={setIsFullUrl} />
               <span className='text-12px text-t-secondary'>{t('settings.fullUrlMode', '完整 URL')}</span>

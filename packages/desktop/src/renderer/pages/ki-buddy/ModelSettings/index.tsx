@@ -25,9 +25,13 @@ export function useKiBuddyModelSettings({ platform, provider, visible, editable 
   const [ready, setReady] = useState(false);
   // Allow the parent form's open/reset effect to clear stale credentials before discovery resumes.
   useEffect(() => setReady(visible !== false), [visible]);
-  const initial = (): KiBuddyModelSettings =>
-    (enabled && provider ? adapter?.read(provider) : undefined) ?? { manual: false };
-  const [state, setState] = useState(() => ({ provider, platform, visible, adapter, enabled, value: initial() }));
+  const initial = () => {
+    const value: KiBuddyModelSettings = (enabled && provider ? adapter?.read(provider) : undefined) ?? {
+      manual: false,
+    };
+    return { provider, platform, visible, adapter, enabled, value, originalManual: value.manual };
+  };
+  const [state, setState] = useState(initial);
   const [error, setError] = useState<string>();
   const changed =
     state.provider !== provider ||
@@ -36,13 +40,15 @@ export function useKiBuddyModelSettings({ platform, provider, visible, editable 
     state.adapter !== adapter ||
     state.enabled !== enabled;
   // Resolve the record synchronously: a saved manual connection must never probe on its first render.
-  const value = changed ? initial() : state.value;
+  const current = changed ? initial() : state;
+  const { value } = current;
   if (changed) {
-    setState({ provider, platform, visible, adapter, enabled, value });
+    setState(current);
     setError(undefined);
   }
   const manual = enabled && value.manual;
-  const configured = enabled && (manual || Boolean(value.gateway));
+  const configured = enabled && (manual || Object.values(value.gateway ?? {}).some((entry) => entry !== undefined));
+  const fullUrlOverride = enabled && (manual || current.originalManual) ? manual : undefined;
 
   const prepare = (next: IProvider): IProvider | null => {
     if (!enabled) return next;
@@ -64,10 +70,10 @@ export function useKiBuddyModelSettings({ platform, provider, visible, editable 
     if (timeout !== undefined && (!Number.isSafeInteger(timeout) || timeout <= 0))
       return fail(t('settings.kiBuddyModel.timeoutInvalid'));
     if (!adapter) return configured ? fail(t('settings.kiBuddyModel.unavailable')) : next;
+    const endpoint = fullUrlOverride === undefined ? next : { ...next, is_full_url: fullUrlOverride };
     const prepared = configured
       ? {
-          ...next,
-          ...(manual ? { is_full_url: true } : {}),
+          ...endpoint,
           model_settings: Object.fromEntries(
             next.models.map((model) => [
               model,
@@ -78,7 +84,7 @@ export function useKiBuddyModelSettings({ platform, provider, visible, editable 
             ])
           ),
         }
-      : next;
+      : endpoint;
     try {
       return adapter.write(prepared, value);
     } catch {
@@ -88,7 +94,7 @@ export function useKiBuddyModelSettings({ platform, provider, visible, editable 
 
   return {
     discoveryEnabled: !manual && (!enabled || (visible !== false && ready)),
-    forceFullUrl: manual,
+    fullUrlOverride,
     forceChatCompletions: configured,
     prepare,
     fields: enabled ? (
@@ -97,7 +103,7 @@ export function useKiBuddyModelSettings({ platform, provider, visible, editable 
         editable={editable}
         error={error}
         onChange={(next) => {
-          setState({ provider, platform, visible, adapter, enabled, value: next });
+          setState({ ...current, value: next });
           setError(undefined);
         }}
       />

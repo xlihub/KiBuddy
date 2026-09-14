@@ -40,7 +40,7 @@ const EditModeModal = ModalHOC<{ data?: IProvider; onChange(data: IProvider): vo
       provider: data,
       visible: modalProps.visible,
     });
-    const isFullUrl = modelSettings.forceFullUrl || (data?.is_full_url ?? false);
+    const isFullUrl = modelSettings.fullUrlOverride ?? data?.is_full_url ?? false;
 
     // A non-destructive hint shown when a refresh after a Base URL change
     // succeeds but a currently selected model is absent from the new list. It
@@ -118,7 +118,7 @@ const EditModeModal = ModalHOC<{ data?: IProvider; onChange(data: IProvider): vo
     };
 
     useEffect(() => {
-      if (data) {
+      if (data && modalProps.visible) {
         form.setFieldsValue({
           ...data,
           model:
@@ -134,7 +134,7 @@ const EditModeModal = ModalHOC<{ data?: IProvider; onChange(data: IProvider): vo
           bedrockProfile: data.bedrock_config?.profile || '',
         });
       }
-    }, [data, form]);
+    }, [data, form, modalProps.visible]);
 
     return (
       <AionModal
