@@ -1215,6 +1215,32 @@ describe('project distribution build contract', () => {
     }
   );
 
+  it.each([true, false])('allows the non-sensitive model preset bearer switch %s', (bearer) => {
+    const registry = createRegistration({
+      allowed: { ...createRegistration().registrations[0].allowed, nonSensitiveConfigKeys: ['modelPreset'] },
+    });
+    const nonSensitiveConfig = { modelPreset: { bearer } };
+
+    expect(
+      resolve({ registry, manifest: createManifest({ nonSensitiveConfig }) }).productConfig.distribution
+        .nonSensitiveConfig
+    ).toEqual(nonSensitiveConfig);
+  });
+
+  it.each([
+    { modelPreset: { bearer: 'credential' } },
+    { modelPreset: { bearer: { value: 'credential' } } },
+    { modelPreset: { bearer: ['credential'] } },
+    { modelPreset: { nested: { bearer: false } } },
+    { unrelated: { bearer: false } },
+    { bearer: false },
+    { modelPreset: { bearer: false, apiKey: 'credential' } },
+  ])('rejects credentials and bearer fields outside the boolean preset option: %j', (nonSensitiveConfig) => {
+    expect(() => resolve({ manifest: createManifest({ nonSensitiveConfig }) })).toThrowError(
+      /nonSensitiveConfig.*sensitive key/i
+    );
+  });
+
   it('rejects harmless-looking configuration that is not allowed by the trusted registration', () => {
     expect(() => resolve({ manifest: createManifest({ nonSensitiveConfig: { deployment: 'local' } }) })).toThrowError(
       /nonSensitiveConfig.*not allowed/i
