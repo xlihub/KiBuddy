@@ -23,5 +23,18 @@
     "ico": "resources/ki-buddy/zxjt/app.ico",
     "icns": "resources/ki-buddy/zxjt/app.icns"
   },
-  "nonSensitiveConfig": {}
+  "nonSensitiveConfig": {
+    "modelPreset": {
+      "id": "zxjt-custom-model",
+      "name": "项目模型",
+      "endpoint": "http://10.16.192.68/inner/ai/llm/chat",
+      "modelIds": ["qwen3.8-27b-zxjt"],
+      "headerNames": ["appId", "secretKey", "apikey"],
+      "manual": true,
+      "protocol": "chat_completions",
+      "bearer": false,
+      "proxy": "direct",
+      "streamOptions": true
+    }
+  }
 }
