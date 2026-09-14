@@ -6,7 +6,10 @@ export type KiBuddyModelSettings = {
   gateway?: {
     bearer?: boolean;
     proxy?: 'system' | 'direct';
-    timeoutSeconds?: number;
+    headers?: { name: string; value: string }[];
+    connectTimeoutSeconds?: number;
+    readTimeoutSeconds?: number;
+    totalTimeoutSeconds?: number;
     streamOptions?: boolean;
   };
 };
@@ -15,4 +18,12 @@ export type KiBuddyModelSettings = {
 export type KiBuddyModelSettingsAdapter = {
   read(provider: IProvider): KiBuddyModelSettings | undefined;
   write(provider: IProvider, settings: KiBuddyModelSettings): IProvider;
+};
+
+/** Separate from the automatic form: private endpoints must never enter discovery. */
+export type KiBuddyManualModelDraft = {
+  name: string;
+  endpoint: string;
+  apiKey: string;
+  modelIds: string;
 };

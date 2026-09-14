@@ -144,6 +144,13 @@ const EditModeModal = ModalHOC<{ data?: IProvider; onChange(data: IProvider): vo
         header={{ title: t('settings.editModel'), showClose: true }}
         style={{ minHeight: '400px' }}
         onOk={async () => {
+          if (
+            modelSettings.submitManual((next) => {
+              props.onChange(next);
+              modalCtrl.close();
+            })
+          )
+            return;
           try {
             const values = await form.validate();
             const updatedProvider: IProvider = {
@@ -183,207 +190,212 @@ const EditModeModal = ModalHOC<{ data?: IProvider; onChange(data: IProvider): vo
         {messageContext}
         <div>
           <Form data-testid='model-provider-edit-form' form={form} layout='vertical'>
-            {/* 模型供应商名称（可编辑，带 Logo）/ Model Provider name (editable, with Logo) */}
-            <Form.Item
-              label={
-                <span className='inline-flex items-center gap-6px'>
-                  <ProviderLogo logo={providerLogo} name={data?.name || ''} size={16} />
-                  <span>{t('settings.modelProvider')}</span>
-                </span>
-              }
-              field='name'
-              required
-              rules={[{ required: true }]}
-            >
-              <Input data-testid='model-provider-name' placeholder={t('settings.modelProvider')} />
-            </Form.Item>
-
             {modelSettings.fields}
-
-            {/* Base URL */}
-            <Form.Item
-              hidden={isBedrock}
-              label={
-                <span className='inline-flex items-center gap-4px'>
-                  {t('settings.apiEndpoint', 'API 请求地址')}
-                  {isFullUrl && (
-                    <Tag size='small' color='arcoblue'>
-                      {t('settings.fullUrl', '完整URL')}
-                    </Tag>
-                  )}
-                </span>
-              }
-              required={data?.platform !== 'gemini' && data?.platform !== 'gemini-vertex-ai' && !isBedrock}
-              rules={[{ required: data?.platform !== 'gemini' && data?.platform !== 'gemini-vertex-ai' && !isBedrock }]}
-              field={'base_url'}
-            >
-              <Input onBlur={handleBaseUrlBlur} />
-            </Form.Item>
-            {modelsMissingAfterRefresh.length > 0 && (
-              <div className='text-11px text-t-secondary -mt-8px mb-12px'>
-                {t('settings.modelNotFoundAfterUrlChange', { model: modelsMissingAfterRefresh.join(', ') })}
-              </div>
-            )}
-
-            <Form.Item
-              hidden={isBedrock}
-              label={t('settings.apiKey')}
-              required={!isBedrock}
-              rules={[{ required: !isBedrock }]}
-              field={'api_key'}
-              extra={<div className='text-11px text-t-secondary mt-2'>💡 {t('settings.multiApiKeyEditTip')}</div>}
-            >
-              <Input.TextArea rows={4} placeholder={t('settings.apiKeyPlaceholder')} />
-            </Form.Item>
-
-            {/* AWS Bedrock Authentication Method */}
-            <Form.Item
-              hidden={!isBedrock}
-              label={t('settings.bedrock.authMethod')}
-              field={'bedrockAuthMethod'}
-              required={isBedrock}
-              rules={[{ required: isBedrock }]}
-            >
-              <Select>
-                <Select.Option value='accessKey'>{t('settings.bedrock.authMethodAccessKey')}</Select.Option>
-                <Select.Option value='profile'>{t('settings.bedrock.authMethodProfile')}</Select.Option>
-              </Select>
-            </Form.Item>
-
-            {/* AWS Region */}
-            <Form.Item
-              hidden={!isBedrock}
-              label={t('settings.bedrock.region')}
-              field={'bedrockRegion'}
-              required={isBedrock}
-              rules={[{ required: isBedrock }]}
-              extra={t('settings.bedrock.regionHint')}
-            >
-              <Select showSearch>
-                <Select.Option value='us-east-1'>US East (N. Virginia)</Select.Option>
-                <Select.Option value='us-west-2'>US West (Oregon)</Select.Option>
-                <Select.Option value='eu-west-1'>Europe (Ireland)</Select.Option>
-                <Select.Option value='eu-central-1'>Europe (Frankfurt)</Select.Option>
-                <Select.Option value='ap-southeast-1'>Asia Pacific (Singapore)</Select.Option>
-                <Select.Option value='ap-northeast-1'>Asia Pacific (Tokyo)</Select.Option>
-                <Select.Option value='ap-southeast-2'>Asia Pacific (Sydney)</Select.Option>
-                <Select.Option value='ca-central-1'>Canada (Central)</Select.Option>
-              </Select>
-            </Form.Item>
-
-            {/* Access Key ID */}
-            <Form.Item
-              hidden={!isBedrock || bedrockAuthMethod !== 'accessKey'}
-              label={t('settings.bedrock.accessKeyId')}
-              field={'bedrockAccessKeyId'}
-              required={isBedrock && bedrockAuthMethod === 'accessKey'}
-              rules={[{ required: isBedrock && bedrockAuthMethod === 'accessKey' }]}
-            >
-              <Input.Password placeholder='AKIA...' visibilityToggle />
-            </Form.Item>
-
-            {/* Secret Access Key */}
-            <Form.Item
-              hidden={!isBedrock || bedrockAuthMethod !== 'accessKey'}
-              label={t('settings.bedrock.secretAccessKey')}
-              field={'bedrockSecretAccessKey'}
-              required={isBedrock && bedrockAuthMethod === 'accessKey'}
-              rules={[{ required: isBedrock && bedrockAuthMethod === 'accessKey' }]}
-            >
-              <Input.Password visibilityToggle />
-            </Form.Item>
-
-            {/* AWS Profile */}
-            <Form.Item
-              hidden={!isBedrock || bedrockAuthMethod !== 'profile'}
-              label={t('settings.bedrock.profile')}
-              field={'bedrockProfile'}
-              required={isBedrock && bedrockAuthMethod === 'profile'}
-              rules={[{ required: isBedrock && bedrockAuthMethod === 'profile' }]}
-              extra={t('settings.bedrock.profileHint')}
-            >
-              <Input placeholder='default' />
-            </Form.Item>
-
-            {/* Model Selection */}
-            <Form.Item
-              label={t('settings.modelName')}
-              field={'model'}
-              required
-              rules={[{ required: true }]}
-              validateStatus={!isFullUrl && modelListState.error ? 'error' : undefined}
-              help={
-                !isFullUrl && modelListState.error instanceof Error
-                  ? modelListState.error.message
-                  : !isFullUrl && modelListState.error
-                    ? String(modelListState.error)
-                    : undefined
-              }
-            >
-              <Select
-                loading={!isFullUrl && modelListState.isLoading}
-                showSearch
-                allowCreate
-                mode={data?.models && data.models.length > 1 ? 'multiple' : undefined}
-                onFocus={async () => {
-                  if (isFullUrl) return;
-                  // For Bedrock, build bedrock_config from current form values and fetch models
-                  if (isBedrock) {
-                    const values = form.getFields();
-                    if (!values.bedrockAuthMethod || !values.bedrockRegion) {
-                      message.error(t('settings.bedrock.fillRequiredFields'));
-                      return;
-                    }
-                    if (
-                      values.bedrockAuthMethod === 'accessKey' &&
-                      (!values.bedrockAccessKeyId || !values.bedrockSecretAccessKey)
-                    ) {
-                      message.error(t('settings.bedrock.fillRequiredFields'));
-                      return;
-                    }
-                    if (values.bedrockAuthMethod === 'profile' && !values.bedrockProfile) {
-                      message.error(t('settings.bedrock.fillRequiredFields'));
-                      return;
-                    }
-                    // Build bedrock_config and fetch models manually
-                    const bedrock_config = {
-                      auth_method: values.bedrockAuthMethod,
-                      region: values.bedrockRegion,
-                      ...(values.bedrockAuthMethod === 'accessKey'
-                        ? {
-                            access_key_id: values.bedrockAccessKeyId,
-                            secret_access_key: values.bedrockSecretAccessKey,
-                          }
-                        : {
-                            profile: values.bedrockProfile,
-                          }),
-                    };
-                    try {
-                      const res = await ipcBridge.mode.fetchModelList.invoke({
-                        platform: data?.platform || 'bedrock',
-                        api_key: '',
-                        bedrock_config,
-                      });
-                      const models =
-                        res.models.map((v) => {
-                          if (typeof v === 'string') {
-                            return { label: v, value: v };
-                          } else {
-                            return { label: v.name, value: v.id };
-                          }
-                        }) || [];
-                      // Update the model list state manually
-                      void modelListState.mutate({ models }, false);
-                    } catch (error: any) {
-                      message.error(error.message || 'Failed to fetch models');
-                    }
-                    return;
+            {!modelSettings.manual && (
+              <>
+                {/* 模型供应商名称（可编辑，带 Logo）/ Model Provider name (editable, with Logo) */}
+                <Form.Item
+                  label={
+                    <span className='inline-flex items-center gap-6px'>
+                      <ProviderLogo logo={providerLogo} name={data?.name || ''} size={16} />
+                      <span>{t('settings.modelProvider')}</span>
+                    </span>
                   }
-                  void modelListState.mutate();
-                }}
-                options={isFullUrl ? [] : modelListState.data?.models || []}
-              />
-            </Form.Item>
+                  field='name'
+                  required
+                  rules={[{ required: true }]}
+                >
+                  <Input data-testid='model-provider-name' placeholder={t('settings.modelProvider')} />
+                </Form.Item>
+
+                {/* Base URL */}
+                <Form.Item
+                  hidden={isBedrock}
+                  label={
+                    <span className='inline-flex items-center gap-4px'>
+                      {t('settings.apiEndpoint', 'API 请求地址')}
+                      {isFullUrl && (
+                        <Tag size='small' color='arcoblue'>
+                          {t('settings.fullUrl', '完整URL')}
+                        </Tag>
+                      )}
+                    </span>
+                  }
+                  required={data?.platform !== 'gemini' && data?.platform !== 'gemini-vertex-ai' && !isBedrock}
+                  rules={[
+                    { required: data?.platform !== 'gemini' && data?.platform !== 'gemini-vertex-ai' && !isBedrock },
+                  ]}
+                  field={'base_url'}
+                >
+                  <Input onBlur={handleBaseUrlBlur} />
+                </Form.Item>
+                {modelsMissingAfterRefresh.length > 0 && (
+                  <div className='text-11px text-t-secondary -mt-8px mb-12px'>
+                    {t('settings.modelNotFoundAfterUrlChange', { model: modelsMissingAfterRefresh.join(', ') })}
+                  </div>
+                )}
+
+                <Form.Item
+                  hidden={isBedrock}
+                  label={t('settings.apiKey')}
+                  required={!isBedrock}
+                  rules={[{ required: !isBedrock }]}
+                  field={'api_key'}
+                  extra={<div className='text-11px text-t-secondary mt-2'>💡 {t('settings.multiApiKeyEditTip')}</div>}
+                >
+                  <Input.TextArea rows={4} placeholder={t('settings.apiKeyPlaceholder')} />
+                </Form.Item>
+
+                {/* AWS Bedrock Authentication Method */}
+                <Form.Item
+                  hidden={!isBedrock}
+                  label={t('settings.bedrock.authMethod')}
+                  field={'bedrockAuthMethod'}
+                  required={isBedrock}
+                  rules={[{ required: isBedrock }]}
+                >
+                  <Select>
+                    <Select.Option value='accessKey'>{t('settings.bedrock.authMethodAccessKey')}</Select.Option>
+                    <Select.Option value='profile'>{t('settings.bedrock.authMethodProfile')}</Select.Option>
+                  </Select>
+                </Form.Item>
+
+                {/* AWS Region */}
+                <Form.Item
+                  hidden={!isBedrock}
+                  label={t('settings.bedrock.region')}
+                  field={'bedrockRegion'}
+                  required={isBedrock}
+                  rules={[{ required: isBedrock }]}
+                  extra={t('settings.bedrock.regionHint')}
+                >
+                  <Select showSearch>
+                    <Select.Option value='us-east-1'>US East (N. Virginia)</Select.Option>
+                    <Select.Option value='us-west-2'>US West (Oregon)</Select.Option>
+                    <Select.Option value='eu-west-1'>Europe (Ireland)</Select.Option>
+                    <Select.Option value='eu-central-1'>Europe (Frankfurt)</Select.Option>
+                    <Select.Option value='ap-southeast-1'>Asia Pacific (Singapore)</Select.Option>
+                    <Select.Option value='ap-northeast-1'>Asia Pacific (Tokyo)</Select.Option>
+                    <Select.Option value='ap-southeast-2'>Asia Pacific (Sydney)</Select.Option>
+                    <Select.Option value='ca-central-1'>Canada (Central)</Select.Option>
+                  </Select>
+                </Form.Item>
+
+                {/* Access Key ID */}
+                <Form.Item
+                  hidden={!isBedrock || bedrockAuthMethod !== 'accessKey'}
+                  label={t('settings.bedrock.accessKeyId')}
+                  field={'bedrockAccessKeyId'}
+                  required={isBedrock && bedrockAuthMethod === 'accessKey'}
+                  rules={[{ required: isBedrock && bedrockAuthMethod === 'accessKey' }]}
+                >
+                  <Input.Password placeholder='AKIA...' visibilityToggle />
+                </Form.Item>
+
+                {/* Secret Access Key */}
+                <Form.Item
+                  hidden={!isBedrock || bedrockAuthMethod !== 'accessKey'}
+                  label={t('settings.bedrock.secretAccessKey')}
+                  field={'bedrockSecretAccessKey'}
+                  required={isBedrock && bedrockAuthMethod === 'accessKey'}
+                  rules={[{ required: isBedrock && bedrockAuthMethod === 'accessKey' }]}
+                >
+                  <Input.Password visibilityToggle />
+                </Form.Item>
+
+                {/* AWS Profile */}
+                <Form.Item
+                  hidden={!isBedrock || bedrockAuthMethod !== 'profile'}
+                  label={t('settings.bedrock.profile')}
+                  field={'bedrockProfile'}
+                  required={isBedrock && bedrockAuthMethod === 'profile'}
+                  rules={[{ required: isBedrock && bedrockAuthMethod === 'profile' }]}
+                  extra={t('settings.bedrock.profileHint')}
+                >
+                  <Input placeholder='default' />
+                </Form.Item>
+
+                {/* Model Selection */}
+                <Form.Item
+                  label={t('settings.modelName')}
+                  field={'model'}
+                  required
+                  rules={[{ required: true }]}
+                  validateStatus={!isFullUrl && modelListState.error ? 'error' : undefined}
+                  help={
+                    !isFullUrl && modelListState.error instanceof Error
+                      ? modelListState.error.message
+                      : !isFullUrl && modelListState.error
+                        ? String(modelListState.error)
+                        : undefined
+                  }
+                >
+                  <Select
+                    loading={!isFullUrl && modelListState.isLoading}
+                    showSearch
+                    allowCreate
+                    mode={data?.models && data.models.length > 1 ? 'multiple' : undefined}
+                    onFocus={async () => {
+                      if (isFullUrl) return;
+                      // For Bedrock, build bedrock_config from current form values and fetch models
+                      if (isBedrock) {
+                        const values = form.getFields();
+                        if (!values.bedrockAuthMethod || !values.bedrockRegion) {
+                          message.error(t('settings.bedrock.fillRequiredFields'));
+                          return;
+                        }
+                        if (
+                          values.bedrockAuthMethod === 'accessKey' &&
+                          (!values.bedrockAccessKeyId || !values.bedrockSecretAccessKey)
+                        ) {
+                          message.error(t('settings.bedrock.fillRequiredFields'));
+                          return;
+                        }
+                        if (values.bedrockAuthMethod === 'profile' && !values.bedrockProfile) {
+                          message.error(t('settings.bedrock.fillRequiredFields'));
+                          return;
+                        }
+                        // Build bedrock_config and fetch models manually
+                        const bedrock_config = {
+                          auth_method: values.bedrockAuthMethod,
+                          region: values.bedrockRegion,
+                          ...(values.bedrockAuthMethod === 'accessKey'
+                            ? {
+                                access_key_id: values.bedrockAccessKeyId,
+                                secret_access_key: values.bedrockSecretAccessKey,
+                              }
+                            : {
+                                profile: values.bedrockProfile,
+                              }),
+                        };
+                        try {
+                          const res = await ipcBridge.mode.fetchModelList.invoke({
+                            platform: data?.platform || 'bedrock',
+                            api_key: '',
+                            bedrock_config,
+                          });
+                          const models =
+                            res.models.map((v) => {
+                              if (typeof v === 'string') {
+                                return { label: v, value: v };
+                              } else {
+                                return { label: v.name, value: v.id };
+                              }
+                            }) || [];
+                          // Update the model list state manually
+                          void modelListState.mutate({ models }, false);
+                        } catch (error: any) {
+                          message.error(error.message || 'Failed to fetch models');
+                        }
+                        return;
+                      }
+                      void modelListState.mutate();
+                    }}
+                    options={isFullUrl ? [] : modelListState.data?.models || []}
+                  />
+                </Form.Item>
+              </>
+            )}
           </Form>
         </div>
       </AionModal>

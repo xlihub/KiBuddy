@@ -86,6 +86,15 @@ async function createForm(manual = true, mapping: KiBuddyModelSettingsAdapter | 
   return user;
 }
 async function fillCreate(user: ReturnType<typeof userEvent.setup>) {
+  if (screen.queryByLabelText('settings.kiBuddyModel.chatEndpoint')) {
+    await user.type(
+      screen.getByLabelText('settings.kiBuddyModel.chatEndpoint'),
+      'https://example.invalid/inner/chat?route=test'
+    );
+    await user.type(screen.getByLabelText('settings.kiBuddyModel.apiKey'), 'synthetic-key');
+    await user.type(screen.getByLabelText('settings.kiBuddyModel.requestModelId'), 'requested-model-id');
+    return;
+  }
   await user.type(screen.getByTestId('model-provider-base-url'), 'https://example.invalid/inner/chat?route=test');
   await user.type(screen.getByTestId('model-provider-api-key'), 'synthetic-key');
   const model = screen.getByTestId('model-provider-models').querySelector('input')!;
@@ -97,10 +106,83 @@ async function fillCreate(user: ReturnType<typeof userEvent.setup>) {
 const settleDetection = () => new Promise((resolve) => setTimeout(resolve, 1150));
 
 describe('KiBuddy model dialogs', () => {
+  it('replaces the automatic form with product inputs when manual mode is enabled', async () => {
+    await createForm();
+    expect(screen.queryByTestId('model-provider-models')).not.toBeInTheDocument();
+    expect(screen.queryByText('settings.multiApiKeyTip')).not.toBeInTheDocument();
+    expect(screen.getByRole('textbox', { name: 'settings.kiBuddyModel.requestModelId' })).toBeInTheDocument();
+  });
+
+  it('saves an explicit no-Bearer draft without API key or dropdown suggestions', async () => {
+    const user = await createForm();
+    await user.click(screen.getByLabelText('settings.kiBuddyModel.bearer'));
+    fireEvent.click(screen.getByText('settings.kiBuddyModel.noBearer'));
+    await user.type(screen.getByLabelText('settings.kiBuddyModel.chatEndpoint'), 'https://example.invalid/chat');
+    await user.type(screen.getByLabelText('settings.kiBuddyModel.requestModelId'), 'private-id');
+    await user.click(screen.getByText('common.confirm'));
+    await waitFor(() => expect(submit).toHaveBeenCalledOnce());
+    expect(submit.mock.calls[0][0]).toMatchObject({ api_key: '', models: ['private-id'] });
+    expect([mocks.fetch.mock.calls, mocks.detect.mock.calls]).toEqual([[], []]);
+  });
+
+  it('restores the automatic draft and keeps gateway options out of its submission', async () => {
+    const user = await createForm(false);
+    await fillCreate(user);
+    await user.click(screen.getByRole('switch', { name: 'settings.kiBuddyModel.manual' }));
+    await user.type(
+      screen.getByLabelText('settings.kiBuddyModel.chatEndpoint'),
+      'https://example.invalid/private/chat'
+    );
+    await user.click(screen.getByText('settings.kiBuddyModel.advanced'));
+    await user.type(screen.getByLabelText('settings.kiBuddyModel.totalTimeout'), '120');
+    await user.click(screen.getByRole('switch', { name: 'settings.kiBuddyModel.manual' }));
+    expect(screen.queryByText('settings.kiBuddyModel.advanced')).not.toBeInTheDocument();
+    await user.click(screen.getByText('common.confirm'));
+    await waitFor(() => expect(submit).toHaveBeenCalledOnce());
+    expect(submit.mock.calls[0][0]).toMatchObject({
+      base_url: 'https://example.invalid/inner/chat?route=test',
+      testOnlySettings: { manual: false },
+    });
+  });
+
+  it('edits SDK header credentials and independent transport timeouts through the product form', async () => {
+    const user = await createForm();
+    await fillCreate(user);
+    await user.click(screen.getByText('settings.kiBuddyModel.advanced'));
+    await user.click(screen.getByText('settings.kiBuddyModel.addHeader'));
+    await user.type(screen.getByLabelText('settings.kiBuddyModel.headerName'), 'X-Synthetic-Key');
+    await user.type(screen.getByLabelText('settings.kiBuddyModel.headerValue'), 'synthetic-header-secret');
+    expect(screen.getByLabelText('settings.kiBuddyModel.headerValue')).toHaveAttribute('type', 'password');
+    await user.type(screen.getByLabelText('settings.kiBuddyModel.connectTimeout'), '10');
+    await user.type(screen.getByLabelText('settings.kiBuddyModel.readTimeout'), '60');
+    await user.type(screen.getByLabelText('settings.kiBuddyModel.totalTimeout'), '120');
+    await user.click(screen.getByText('common.confirm'));
+    await waitFor(() => expect(submit).toHaveBeenCalledOnce());
+    expect(submit.mock.calls[0][0].testOnlySettings).toMatchObject({
+      manual: true,
+      gateway: {
+        headers: [{ name: 'X-Synthetic-Key', value: 'synthetic-header-secret' }],
+        connectTimeoutSeconds: 10,
+        readTimeoutSeconds: 60,
+        totalTimeoutSeconds: 120,
+      },
+    });
+  });
+
+  it('keeps an invalid Bearer draft open before reaching the adapter', async () => {
+    const user = await createForm();
+    await user.type(screen.getByLabelText('settings.kiBuddyModel.chatEndpoint'), 'https://example.invalid/chat');
+    await user.type(screen.getByLabelText('settings.kiBuddyModel.requestModelId'), 'private-id');
+    await user.click(screen.getByText('common.confirm'));
+    expect(await screen.findByText('settings.kiBuddyModel.keyRequired')).toBeInTheDocument();
+    expect(submit).not.toHaveBeenCalled();
+    expect(close).not.toHaveBeenCalled();
+  });
+
   it('creates a manual connection without discovering models or correcting its complete URL', async () => {
     const user = await createForm();
     await fillCreate(user);
-    fireEvent.blur(screen.getByTestId('model-provider-base-url'));
+    fireEvent.blur(screen.getByLabelText('settings.kiBuddyModel.chatEndpoint'));
     await settleDetection();
     await user.click(screen.getByText('common.confirm'));
     await waitFor(() => expect(submit).toHaveBeenCalledOnce());
@@ -129,7 +211,7 @@ describe('KiBuddy model dialogs', () => {
       JSON.stringify(
         provider({
           manual: true,
-          gateway: { proxy: 'direct', bearer: false, timeoutSeconds: 120, streamOptions: false },
+          gateway: { proxy: 'direct', bearer: false, totalTimeoutSeconds: 120, streamOptions: false },
         })
       )
     );
@@ -140,7 +222,7 @@ describe('KiBuddy model dialogs', () => {
     await user.clear(url);
     await user.type(url, 'https://example.invalid/updated/chat');
     fireEvent.blur(url);
-    await user.click(screen.getByText('requested-model-id'));
+    await user.click(screen.getByLabelText('settings.kiBuddyModel.requestModelId'));
     await settleDetection();
     await user.click(screen.getByText('common.save'));
     await waitFor(() => expect(submit).toHaveBeenCalledOnce());
@@ -164,7 +246,7 @@ describe('KiBuddy model dialogs', () => {
         />
       )
     );
-    const input = screen.getByPlaceholderText('settings.addModelPlaceholder');
+    const input = screen.getByLabelText('settings.kiBuddyModel.requestModelId');
     await user.type(input, 'second-request-id');
     fireEvent.keyDown(input, { key: 'Enter', keyCode: 13 });
     await user.click(screen.getByText('common.confirm'));
@@ -211,10 +293,15 @@ describe('KiBuddy model dialogs', () => {
       finish({ models: ['response-alias'], fixed_base_url: 'https://example.invalid/rewritten' });
       await response;
     });
-    fireEvent.blur(screen.getByTestId('model-provider-base-url'));
+    fireEvent.change(screen.getByLabelText('settings.kiBuddyModel.chatEndpoint'), {
+      target: { value: 'https://example.invalid/manual/chat' },
+    });
+    fireEvent.blur(screen.getByLabelText('settings.kiBuddyModel.chatEndpoint'));
     fireEvent.focus(window);
     await settleDetection();
-    expect(screen.getByTestId('model-provider-base-url')).toHaveValue('https://example.invalid/exact/chat');
+    expect(screen.getByLabelText('settings.kiBuddyModel.chatEndpoint')).toHaveValue(
+      'https://example.invalid/manual/chat'
+    );
     expect(mocks.fetch).toHaveBeenCalledTimes(requests);
     expect(mocks.detect).not.toHaveBeenCalled();
   });
@@ -235,12 +322,13 @@ describe('KiBuddy model dialogs', () => {
     expect(screen.queryByText('settings.kiBuddyModel.manualHint')).not.toBeInTheDocument();
   });
 
-  it('restores automatic discovery when manual mode is turned off', async () => {
+  it('keeps manual credentials out of discovery when returning to an empty automatic draft', async () => {
     const user = await createForm();
     await fillCreate(user);
     await user.click(screen.getByRole('switch', { name: 'settings.kiBuddyModel.manual' }));
-    await waitFor(() => expect(mocks.fetch).toHaveBeenCalled());
-    await waitFor(() => expect(mocks.detect).toHaveBeenCalled(), { timeout: 2500 });
+    await settleDetection();
+    expect(screen.getByTestId('model-provider-base-url')).toHaveValue('');
+    expect([mocks.fetch.mock.calls, mocks.detect.mock.calls]).toEqual([[], []]);
   });
 
   it('does not probe a cancelled manual draft while the dialog is hidden or reopening', async () => {

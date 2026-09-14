@@ -1,9 +1,11 @@
+import { uuid } from '@/common/utils';
 import type { IProvider } from '@/common/config/storage';
 import { getKiBuddyProductRuntime } from '@/renderer/services/runtime/kiBuddyRuntime';
 import React, { createContext, useContext, useEffect, useState } from 'react';
 import { useTranslation } from 'react-i18next';
+import { validateKiBuddyGateway } from './kiBuddyGatewayValidation';
 import { KiBuddyModelSettingsFields } from './KiBuddyModelSettingsFields';
-import type { KiBuddyModelSettings, KiBuddyModelSettingsAdapter } from './types';
+import type { KiBuddyManualModelDraft, KiBuddyModelSettings, KiBuddyModelSettingsAdapter } from './types';
 
 export type { KiBuddyModelSettings, KiBuddyModelSettingsAdapter } from './types';
 
@@ -15,10 +17,11 @@ type Options = {
   provider?: IProvider;
   visible?: boolean;
   editable?: boolean;
+  editingModel?: string;
 };
 
 /** Selects product behavior at one capability boundary for all three model dialogs. */
-export function useKiBuddyModelSettings({ platform, provider, visible, editable = true }: Options) {
+export function useKiBuddyModelSettings({ platform, provider, visible, editable = true, editingModel }: Options) {
   const { t } = useTranslation();
   const adapter = useContext(KiBuddyModelSettingsAdapterContext);
   const enabled = Boolean(getKiBuddyProductRuntime()) && platform === 'custom';
@@ -29,7 +32,13 @@ export function useKiBuddyModelSettings({ platform, provider, visible, editable 
     const value: KiBuddyModelSettings = (enabled && provider ? adapter?.read(provider) : undefined) ?? {
       manual: false,
     };
-    return { provider, platform, visible, adapter, enabled, value, originalManual: value.manual };
+    const draft: KiBuddyManualModelDraft = {
+      name: provider?.name ?? '',
+      endpoint: provider?.base_url ?? '',
+      apiKey: provider?.api_key ?? '',
+      modelIds: editable ? (provider?.models.join('\n') ?? '') : (editingModel ?? ''),
+    };
+    return { provider, platform, visible, adapter, enabled, editingModel, value, draft, originalManual: value.manual };
   };
   const [state, setState] = useState(initial);
   const [error, setError] = useState<string>();
@@ -38,7 +47,8 @@ export function useKiBuddyModelSettings({ platform, provider, visible, editable 
     state.platform !== platform ||
     state.visible !== visible ||
     state.adapter !== adapter ||
-    state.enabled !== enabled;
+    state.enabled !== enabled ||
+    state.editingModel !== editingModel;
   // Resolve the record synchronously: a saved manual connection must never probe on its first render.
   const current = changed ? initial() : state;
   const { value } = current;
@@ -47,7 +57,7 @@ export function useKiBuddyModelSettings({ platform, provider, visible, editable 
     setError(undefined);
   }
   const manual = enabled && value.manual;
-  const configured = enabled && (manual || Object.values(value.gateway ?? {}).some((entry) => entry !== undefined));
+  const configured = manual;
   const fullUrlOverride = enabled && (manual || current.originalManual) ? manual : undefined;
 
   const prepare = (next: IProvider): IProvider | null => {
@@ -66,14 +76,14 @@ export function useKiBuddyModelSettings({ platform, provider, visible, editable 
       if (!next.models.length || next.models.some((model) => !model?.trim()))
         return fail(t('settings.kiBuddyModel.modelRequired'));
     }
-    const timeout = value.gateway?.timeoutSeconds;
-    if (timeout !== undefined && (!Number.isSafeInteger(timeout) || timeout <= 0))
-      return fail(t('settings.kiBuddyModel.timeoutInvalid'));
+    const gatewayError = manual ? validateKiBuddyGateway(next.api_key, value.gateway) : undefined;
+    if (gatewayError) return fail(t(gatewayError));
     if (!adapter) return configured ? fail(t('settings.kiBuddyModel.unavailable')) : next;
     const endpoint = fullUrlOverride === undefined ? next : { ...next, is_full_url: fullUrlOverride };
     const prepared = configured
       ? {
           ...endpoint,
+          api_key: value.gateway?.bearer === false ? '' : endpoint.api_key,
           model_settings: Object.fromEntries(
             next.models.map((model) => [
               model,
@@ -86,13 +96,40 @@ export function useKiBuddyModelSettings({ platform, provider, visible, editable 
         }
       : endpoint;
     try {
-      return adapter.write(prepared, value);
+      return adapter.write(prepared, manual ? value : { manual: false });
     } catch {
       return fail(t('settings.kiBuddyModel.mappingFailed'));
     }
   };
 
+  // Returns true when the product consumes submission, including validation failure.
+  const submitManual = (onSave: (next: IProvider) => void): boolean => {
+    if (!manual) return false;
+    const ids = current.draft.modelIds
+      .split('\n')
+      .map((id) => id.trim())
+      .filter(Boolean);
+    if (!ids.length) {
+      setError(t('settings.kiBuddyModel.modelRequired'));
+      return true;
+    }
+    const next: IProvider = {
+      ...provider,
+      id: provider?.id ?? uuid(),
+      name: current.draft.name.trim() || ids[0],
+      platform: 'custom',
+      base_url: current.draft.endpoint,
+      api_key: current.draft.apiKey,
+      models: editable ? [...new Set(ids)] : [...new Set([...(provider?.models ?? []), ...ids])],
+    };
+    const prepared = prepare(next);
+    if (prepared) onSave(prepared);
+    return true;
+  };
+
   return {
+    manual,
+    submitManual,
     discoveryEnabled: !manual && (!enabled || (visible !== false && ready)),
     fullUrlOverride,
     forceChatCompletions: configured,
@@ -100,6 +137,13 @@ export function useKiBuddyModelSettings({ platform, provider, visible, editable 
     fields: enabled ? (
       <KiBuddyModelSettingsFields
         value={value}
+        draft={current.draft}
+        modelOnly={!editable}
+        editingModel={editingModel}
+        onDraftChange={(draft) => {
+          setState({ ...current, draft });
+          setError(undefined);
+        }}
         editable={editable}
         error={error}
         onChange={(next) => {

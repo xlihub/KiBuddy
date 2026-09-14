@@ -71,22 +71,23 @@ describe('KiBuddy model settings adapter boundary', () => {
     expect(screen.getByText('discovery allowed')).toBeInTheDocument();
   });
 
-  it('keeps gateway controls independent of manual discovery and emits explicit false values', async () => {
+  it('keeps gateway controls inside manual mode and emits explicit false values', async () => {
     const user = userEvent.setup();
     render(<Harness />);
+    await user.click(screen.getByRole('switch'));
     await user.click(screen.getByText('settings.kiBuddyModel.advanced'));
     await user.click(screen.getByLabelText('settings.kiBuddyModel.bearer'));
-    fireEvent.click(screen.getByText('settings.kiBuddyModel.disabled'));
-    await user.type(screen.getByLabelText('settings.kiBuddyModel.timeout'), '120');
+    fireEvent.click(screen.getByText('settings.kiBuddyModel.noBearer'));
+    await user.type(screen.getByLabelText('settings.kiBuddyModel.totalTimeout'), '120');
     await user.click(screen.getByText('save'));
     expect(write).toHaveBeenCalledWith(
       expect.objectContaining({
         base_url: record.base_url,
         model_settings: { 'request-id': { image_input: 'supported', openai_api_mode: 'chat_completions' } },
       }),
-      { manual: false, gateway: { bearer: false, timeoutSeconds: 120 } }
+      { manual: true, gateway: { bearer: false, totalTimeoutSeconds: 120 } }
     );
-    expect(screen.getByText('discovery allowed')).toBeInTheDocument();
+    expect(screen.getByText('discovery paused')).toBeInTheDocument();
   });
 
   it.each([
@@ -103,12 +104,72 @@ describe('KiBuddy model settings adapter boundary', () => {
     expect(submitted).toHaveBeenCalledWith(null);
   });
 
-  it.each([0, -1, 1.5])('rejects an invalid timeout of %s seconds', (timeoutSeconds) => {
-    read.mockReturnValue({ manual: false, gateway: { timeoutSeconds } });
+  it.each([-1, Number.NaN, Number.POSITIVE_INFINITY])(
+    'rejects an invalid timeout of %s seconds',
+    (totalTimeoutSeconds) => {
+      read.mockReturnValue({ manual: true, gateway: { totalTimeoutSeconds } });
+      render(<Harness />);
+      fireEvent.click(screen.getByText('save'));
+      expect(screen.getByText('settings.kiBuddyModel.timeoutInvalid')).toBeInTheDocument();
+      expect(write).not.toHaveBeenCalled();
+    }
+  );
+
+  it('requires a nonblank API key for the SDK default Bearer authentication', () => {
+    read.mockReturnValue({ manual: true });
+    render(<Harness data={{ ...record, api_key: '  ' }} />);
+    fireEvent.click(screen.getByText('save'));
+    expect(screen.getByText('settings.kiBuddyModel.keyRequired')).toBeInTheDocument();
+    expect(write).not.toHaveBeenCalled();
+  });
+
+  it('ignores API Key with SDK auth None while preserving explicit header credentials', () => {
+    read.mockReturnValue({
+      manual: true,
+      gateway: { bearer: false, headers: [{ name: 'Authorization', value: 'Custom synthetic' }] },
+    });
     render(<Harness />);
     fireEvent.click(screen.getByText('save'));
-    expect(screen.getByText('settings.kiBuddyModel.timeoutInvalid')).toBeInTheDocument();
+    expect(write).toHaveBeenCalledWith(
+      expect.objectContaining({ api_key: '' }),
+      expect.objectContaining({
+        gateway: { bearer: false, headers: [{ name: 'Authorization', value: 'Custom synthetic' }] },
+      })
+    );
+  });
+
+  it.each([
+    [
+      [
+        { name: 'X-Key', value: 'one' },
+        { name: 'x-key', value: 'two' },
+      ],
+      false,
+      'settings.kiBuddyModel.duplicateHeader',
+    ],
+    [[{ name: 'Host', value: 'example.invalid' }], false, 'settings.kiBuddyModel.reservedHeader'],
+    [[{ name: 'Authorization', value: 'Custom synthetic' }], undefined, 'settings.kiBuddyModel.authorizationConflict'],
+    [[{ name: 'X Key', value: 'synthetic' }], false, 'settings.kiBuddyModel.invalidHeader'],
+    [[{ name: 'X-Key', value: 'synthetic\r\ninjected' }], false, 'settings.kiBuddyModel.invalidHeader'],
+  ] as const)('rejects invalid SDK headers without echoing credentials (%s)', (headers, bearer, error) => {
+    read.mockReturnValue({ manual: true, gateway: { bearer, headers: headers.map((header) => ({ ...header })) } });
+    render(<Harness />);
+    fireEvent.click(screen.getByText('save'));
+    expect(screen.getByText(error)).toBeInTheDocument();
     expect(write).not.toHaveBeenCalled();
+  });
+
+  it('preserves separate SDK connection, read and total request timeouts', () => {
+    const gateway = {
+      connectTimeoutSeconds: 0,
+      readTimeoutSeconds: 0.5,
+      totalTimeoutSeconds: 120,
+      streamOptions: false,
+    };
+    read.mockReturnValue({ manual: true, gateway });
+    render(<Harness />);
+    fireEvent.click(screen.getByText('save'));
+    expect(write).toHaveBeenCalledWith(expect.anything(), { manual: true, gateway });
   });
 
   it('reports adapter failure without echoing its potentially sensitive error', () => {
@@ -144,7 +205,7 @@ describe('KiBuddy model settings adapter boundary', () => {
     read.mockReturnValue({ manual: false, gateway: {} });
     render(<Harness />);
     fireEvent.click(screen.getByText('save'));
-    expect(write).toHaveBeenCalledWith(record, { manual: false, gateway: {} });
+    expect(write).toHaveBeenCalledWith(record, { manual: false });
     expect(screen.getByText('discovery allowed')).toBeInTheDocument();
   });
 });
