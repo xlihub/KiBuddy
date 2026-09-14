@@ -161,6 +161,7 @@ dmg:
       type: link
       path: /Applications
 
+beforePack: scripts/rebuildNativeModules.js
 afterPack: scripts/afterPack.js
 afterSign: scripts/afterSign.js
 

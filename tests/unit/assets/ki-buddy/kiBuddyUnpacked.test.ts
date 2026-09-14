@@ -1,5 +1,6 @@
 import {
   copyFileSync,
+  cpSync,
   existsSync,
   mkdirSync,
   mkdtempSync,
@@ -345,6 +346,33 @@ function createMacFixture(expectedIdentity, bundleIdentifier: string, expectedBu
 }
 
 describe('Ki-Buddy unpacked product verification', () => {
+  it('runs artifact validation without installing build-only dependencies', () => {
+    const isolatedRoot = mkdtempSync(join(tmpdir(), 'ki-buddy-verifier-dependencies-'));
+    try {
+      const scripts = 'packages/shared-scripts/src';
+      cpSync(join(projectRoot, scripts), join(isolatedRoot, scripts), { recursive: true });
+      const registry = 'packages/desktop/src/common/platform/ki-buddy/experience/registry.json';
+      mkdirSync(dirname(join(isolatedRoot, registry)), { recursive: true });
+      copyFileSync(join(projectRoot, registry), join(isolatedRoot, registry));
+      copyFileSync(join(projectRoot, 'ki-buddy-product.json'), join(isolatedRoot, 'ki-buddy-product.json'));
+
+      const output = execFileSync(
+        process.execPath,
+        [
+          '-e',
+          `const { verifyKiBuddyUnpacked } = require('./packages/shared-scripts/src/kiBuddyUnpacked');
+           try { verifyKiBuddyUnpacked(process.cwd(), 'missing-application', 'win32'); }
+           catch (error) { process.stdout.write(error.message); }`,
+        ],
+        { cwd: isolatedRoot, env: { ...process.env, NODE_PATH: '' }, encoding: 'utf8', stdio: 'pipe' }
+      );
+
+      expect(output).toContain('win32 packaged executable is missing:');
+    } finally {
+      rmSync(isolatedRoot, { recursive: true, force: true });
+    }
+  });
+
   it('materializes a Linux application from the installer payload', () => {
     const identity = createProjectPackagingOverlay();
     const tempRoot = mkdtempSync(join(tmpdir(), 'ki-buddy-installer-test-'));
@@ -391,17 +419,17 @@ describe('Ki-Buddy unpacked product verification', () => {
 
   it('materializes and cleans a Windows application installed by the NSIS executable', () => {
     const identity = createProjectPackagingOverlay();
-    const tempRoot = mkdtempSync(join(tmpdir(), 'ki-buddy-installer-test-'));
+    const tempRoot = mkdtempSync(join(tmpdir(), 'ki-buddy installer test-'));
     const installerPath = join(tempRoot, 'ki-buddy-zxjt.exe');
     const installPath = join(tempRoot, 'installed');
     const uninstallPath = join(installPath, `Uninstall ${identity.desktop.productName}.exe`);
     writeFileSync(installerPath, 'installer');
-    const calls: Array<{ command: string; args: string[] }> = [];
+    const calls: Array<{ command: string; args: string[]; windowsVerbatimArguments?: boolean }> = [];
 
     const materialized = materializeKiBuddyInstaller(installerPath, 'windows-x64', identity, {
       tempRoot,
-      execute(command: string, args: string[]) {
-        calls.push({ command, args });
+      execute(command: string, args: string[], options: { windowsVerbatimArguments?: boolean }) {
+        calls.push({ command, args, windowsVerbatimArguments: options.windowsVerbatimArguments });
         if (command === installerPath) {
           mkdirSync(installPath, { recursive: true });
           writeFileSync(uninstallPath, 'uninstaller');
@@ -412,8 +440,8 @@ describe('Ki-Buddy unpacked product verification', () => {
     expect(materialized).toMatchObject({ packageRoot: installPath, unpackedPath: installPath });
     materialized.cleanup();
     expect(calls).toEqual([
-      { command: installerPath, args: ['/S', `/D=${installPath}`] },
-      { command: uninstallPath, args: ['/S'] },
+      { command: installerPath, args: ['/S', `/D=${installPath}`], windowsVerbatimArguments: true },
+      { command: uninstallPath, args: ['/S', `_?=${installPath}`], windowsVerbatimArguments: true },
     ]);
     expect(existsSync(tempRoot)).toBe(false);
   });

@@ -1,5 +1,5 @@
 import type { KiBuddyProductCapability } from '@/common/types/platform/kiBuddyProduct';
-import { KI_BUDDY_PRODUCT_CONFIG_RESULT, type KiBuddyProductConfig } from './productConfig';
+import { KI_BUDDY_PRODUCT_CONFIG_RESULT, parseKiBuddyModelPreset, type KiBuddyProductConfig } from './productConfig';
 import { deepFreeze } from './experience';
 
 /** Serializable renderer capability for the configured Ki-Buddy product runtime. */
@@ -13,6 +13,7 @@ export function createKiBuddyProductCapability(config: KiBuddyProductConfig): Ki
     locale: config.locale,
     themes: config.themes,
     experience: config.experience,
+    modelPreset: parseKiBuddyModelPreset(config.distribution?.nonSensitiveConfig.modelPreset),
   });
 }
 
