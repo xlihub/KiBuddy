@@ -297,7 +297,9 @@ function requireNonSensitiveConfig(value, label = 'Project manifest nonSensitive
   const record = requireRecord(value, label);
   for (const [key, child] of Object.entries(record)) {
     const childPath = [...pathParts, key];
-    if (SENSITIVE_KEY_PATTERN.test(key)) {
+    const isModelPresetBearerOption =
+      pathParts.length === 1 && pathParts[0] === 'modelPreset' && key === 'bearer' && typeof child === 'boolean';
+    if (SENSITIVE_KEY_PATTERN.test(key) && !isModelPresetBearerOption) {
       throw new Error(`${label} contains sensitive key ${childPath.join('.')}`);
     }
     if (child && typeof child === 'object') {
