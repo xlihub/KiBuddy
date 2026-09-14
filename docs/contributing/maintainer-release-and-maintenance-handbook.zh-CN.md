@@ -649,3 +649,11 @@ Ki-Buddy `0.1.0` 是“需要修改 workflow 代码”的确定性失败，因�
 - 版本号、上游映射、CHANGELOG、Ki-Core 公开 Release 和 Ki-Buddy 内部 Release 的最终责任属于 `xlihub`。
 
 未来增加维护者后，优先调整审批规则，不需要重新设计双仓分支和版本模型。
+
+## Ki-Model 维护扩展（2026-09-11 已确认，待实施）
+
+Ki-Model 的分支与发布要求沿用本手册的上游候选、管理员选择基准、独立同步 PR、独立产品版本、发布审批和不可变来源原则。main 跟踪 iOfficeAI/aionrs；product/main 为默认产品分支；产品 tag 使用 ki-model-vX.Y.Z。Cargo workspace version 保持上游语义。
+
+实施和验收见 [Ki-Model #2](https://github.com/xlihub/Ki-Model/issues/2)（分支与上游同步）、[#1](https://github.com/xlihub/Ki-Model/issues/1)（SDK 扩展）、[#3](https://github.com/xlihub/Ki-Model/issues/3)（Release Please 与首版产品 SDK）。未完成这些工单前，不能使用 Ki-Core 专用 release skill 操作 Ki-Model，也不能宣称 Ki-Model 已具备受保护产品发布流程。
+
+每次检查应增加 Ki-Core 所采用的 Ki-Model 产品 tag/commit 与对应 aionrs 上游 tag/peeled commit。Ki-Model 发布不会自动升级 Core，Core 发布不会自动升级 KiBuddy。项目包仍按本次明确选择的 github-history 渠道执行。
