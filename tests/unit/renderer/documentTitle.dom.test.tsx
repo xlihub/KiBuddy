@@ -4,10 +4,11 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
-import { render } from '@testing-library/react';
-import { MemoryRouter } from 'react-router-dom';
-import { describe, expect, it, vi } from 'vitest';
+import { act, render } from '@testing-library/react';
+import { createMemoryRouter, MemoryRouter, RouterProvider } from 'react-router-dom';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import React from 'react';
+import { KI_BUDDY_PRODUCT_CAPABILITY } from '@/common/platform/ki-buddy';
 
 let mockLanguage = 'en-US';
 
@@ -53,5 +54,49 @@ describe('DocumentTitle', () => {
     );
     expect(document.title).toBe('zh:login.pageTitle');
     mockLanguage = 'en-US';
+  });
+});
+
+describe('product document title across navigation', () => {
+  beforeEach(() => {
+    mockLanguage = 'en-US';
+    window.__kiBuddyProductBootstrapError = null;
+    window.__kiBuddyProductPresentation = null;
+  });
+  afterEach(() => {
+    window.__kiBuddyProductPresentation = null;
+    mockLanguage = 'en-US';
+  });
+  it.each([true, false])('keeps the final route title correct with capability=%s', async (withProduct) => {
+    window.__kiBuddyProductPresentation = withProduct ? KI_BUDDY_PRODUCT_CAPABILITY : null;
+    document.title = 'stale title';
+    const router = createMemoryRouter([{ path: '*', element: <DocumentTitle /> }], { initialEntries: ['/login'] });
+    render(<RouterProvider router={router} />);
+    expect(document.title).toBe(withProduct ? 'Ki-Buddy' : 'login.pageTitle');
+    for (const pathname of ['/guid', '/scheduled', '/conversation/abc', '/login']) {
+      await act(() => router.navigate(pathname));
+      expect(document.title).toBe(withProduct ? 'Ki-Buddy' : pathname === '/login' ? 'login.pageTitle' : 'AionUi');
+    }
+    router.dispose();
+  });
+  it('uses the configured product name after mounting and changing language', () => {
+    if (!KI_BUDDY_PRODUCT_CAPABILITY) throw new Error('Missing product fixture');
+    window.__kiBuddyProductPresentation = {
+      ...KI_BUDDY_PRODUCT_CAPABILITY,
+      brand: { ...KI_BUDDY_PRODUCT_CAPABILITY.brand, productName: 'Configured Buddy' },
+    };
+    const view = render(
+      <MemoryRouter initialEntries={['/login']}>
+        <DocumentTitle />
+      </MemoryRouter>
+    );
+    expect(document.title).toBe('Configured Buddy');
+    mockLanguage = 'zh-CN';
+    view.rerender(
+      <MemoryRouter initialEntries={['/login']}>
+        <DocumentTitle />
+      </MemoryRouter>
+    );
+    expect(document.title).toBe('Configured Buddy');
   });
 });

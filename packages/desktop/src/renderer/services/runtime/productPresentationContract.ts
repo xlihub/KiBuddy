@@ -34,5 +34,6 @@ export type ProductPresentationAdapter = {
   adaptAssistantIdentity: <T extends AssistantIdentity>(assistant: T) => T;
   adaptConversationAssistantIdentity: <T extends TConversationAssistantIdentity>(assistant: T) => T;
   brand: RendererBrand;
+  resolveDocumentTitle: (upstreamTitle: string) => string;
   initializeDocument: (root: Document) => void;
 };
