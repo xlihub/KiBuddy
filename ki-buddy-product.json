@@ -112,7 +112,7 @@
     "links": {
       "homepage": "https://github.com/xlihub/KiBuddy",
       "repository": "https://github.com/xlihub/KiBuddy",
-      "releases": "https://github.com/xlihub/Ki-Buddy/releases",
+      "releases": "https://github.com/xlihub/KiBuddy/releases",
       "support": "https://github.com/xlihub/KiBuddy/issues",
       "feedback": "https://github.com/xlihub/KiBuddy/issues/new"
     }
@@ -186,9 +186,9 @@
   },
   "updates": {
     "provider": "github",
-    "repository": "xlihub/Ki-Buddy",
+    "repository": "xlihub/KiBuddy",
     "tagPrefix": "ki-buddy-v",
-    "releasePageUrl": "https://github.com/xlihub/Ki-Buddy/releases"
+    "releasePageUrl": "https://github.com/xlihub/KiBuddy/releases"
   },
   "kiCore": {
     "repository": "xlihub/Ki-Core",

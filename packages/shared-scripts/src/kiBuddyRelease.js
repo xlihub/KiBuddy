@@ -272,7 +272,7 @@ function readProductConfig(projectRoot) {
   if (
     config.brand.links.homepage !== config.source.url ||
     config.brand.links.repository !== config.source.url ||
-    config.brand.links.releases !== config.publicDistribution.releasePageUrl ||
+    config.brand.links.releases !== config.updates.releasePageUrl ||
     config.brand.links.support !== `${config.source.url}/issues` ||
     config.brand.links.feedback !== `${config.source.url}/issues/new`
   ) {
@@ -399,18 +399,18 @@ function readProductConfig(projectRoot) {
   );
   if (
     config.updates.provider !== 'github' ||
-    config.updates.repository !== KI_BUDDY_HISTORICAL_PUBLIC_REPOSITORY ||
+    config.updates.repository !== KI_BUDDY_SOURCE_REPOSITORY ||
     config.updates.tagPrefix !== 'ki-buddy-v' ||
-    config.updates.releasePageUrl !== 'https://github.com/xlihub/Ki-Buddy/releases'
+    config.updates.releasePageUrl !== 'https://github.com/xlihub/KiBuddy/releases'
   ) {
     throw new Error('Ki-Buddy update configuration is invalid');
   }
   if (
-    config.updates.provider !== config.publicDistribution.provider ||
-    config.updates.repository !== config.publicDistribution.repository ||
-    config.updates.releasePageUrl !== config.publicDistribution.releasePageUrl
+    config.updates.provider !== config.internalRelease.provider ||
+    config.updates.repository !== config.internalRelease.repository ||
+    config.updates.releasePageUrl !== config.internalRelease.releasePageUrl
   ) {
-    throw new Error('Ki-Buddy runtime update source must match the current public distribution source');
+    throw new Error('Ki-Buddy runtime update source must match the current release source');
   }
   return config;
 }

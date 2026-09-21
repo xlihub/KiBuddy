@@ -3,12 +3,16 @@
 本文件记录 Ki-Buddy 产品变化、AionUi 上游变化，以及每个版本固定的 Ki-Core/AionCore 来源。
 上游 AionUi 的原始变更记录继续保存在 [`CHANGELOG.md`](CHANGELOG.md)。
 
-## [0.1.8] - 2026-08-28
+## [0.1.8] - 2026-09-21
 
 ### Ki-Buddy 定制变化
 
-- 将产品源码身份和内部 GitHub Release provenance 迁移到 private `xlihub/KiBuddy`，并与 historical public `xlihub/Ki-Buddy` 的公开分发和 runtime update source 分开配置。
-- 发布 preflight 和维护流程只接受 private 源码仓库；现有公开下载、Web CLI 安装脚本和应用内更新行为保持不变。
+- 将产品源码身份和正式 GitHub Release provenance 迁移到 `xlihub/KiBuddy`；历史分发仓库 `xlihub/Ki-Buddy` 与源码仓库分别配置。应用内自动更新、手动检查更新和版本下载入口改为新仓库，Web CLI 安装脚本仍沿用原有分发配置。
+- 支持手动配置模型、自定义网关和连接选项，并支持项目预设中的 Bearer 认证配置。
+- 增加项目专属安装包的品牌、身份隔离和多平台构建配置，并完善安装清理和产物验证。
+- 修复 macOS x64 安装包的 keytar 原生依赖打包问题。
+- 修复登录、首页、定时任务和会话页面切换后窗口标题被覆盖的问题，保持 Ki-Buddy 产品名称。
+- 修复查看定时任务失败详情时触发白屏的问题，并让仅手动运行的任务能够显示失败状态和错误信息。
 
 ### AionUi 上游更新
 

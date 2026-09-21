@@ -454,11 +454,11 @@ export function parseKiBuddyProductConfig(value: unknown): KiBuddyProductConfig 
     throw new Error('Ki-Buddy brand repository must match the configured source repository');
   }
   if (
-    updateProvider !== publicDistributionProvider ||
-    updateRepository !== publicDistributionRepository ||
-    updateReleasePageUrl !== publicDistributionReleasePageUrl
+    updateProvider !== 'github' ||
+    updateRepository !== sourceRepository ||
+    updateReleasePageUrl !== `https://github.com/${sourceRepository}/releases`
   ) {
-    throw new Error('Ki-Buddy update source must match the public distribution source');
+    throw new Error('Ki-Buddy update source must match the source repository');
   }
   return deepFreeze({
     schemaVersion: 4,

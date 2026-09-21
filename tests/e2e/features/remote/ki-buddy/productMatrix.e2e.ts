@@ -224,7 +224,7 @@ test.describe.serial('Ki-Buddy packaged first-release product matrix', () => {
       release: {
         internal: { repository: 'xlihub/KiBuddy' },
         publicDistribution: { repository: 'xlihub/Ki-Buddy' },
-        runtimeUpdates: { repository: 'xlihub/Ki-Buddy' },
+        runtimeUpdates: { repository: 'xlihub/KiBuddy' },
       },
     });
     for (const source of Object.values(evidence.policySources)) {
