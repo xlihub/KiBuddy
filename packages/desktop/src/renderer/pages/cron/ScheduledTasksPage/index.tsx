@@ -23,7 +23,7 @@ import ThemedLogo from '@/renderer/components/agent/ThemedLogo';
 import TalkToButlerButton from '@/renderer/components/base/TalkToButlerButton';
 import { AionSearchInput } from '@/renderer/components/base';
 import SettingsPageHeader from '@/renderer/pages/settings/components/SettingsPageHeader';
-import { Attention, Robot } from '@icon-park/react';
+import { Robot } from '@icon-park/react';
 
 const ScheduledTasksPage: React.FC = () => {
   const layout = useLayoutContext();
@@ -208,9 +208,6 @@ const ScheduledTasksPage: React.FC = () => {
                     ? t('cron.page.form.newConversation')
                     : t('cron.page.form.existingConversation');
                 const nextRun = job.state.next_run_at_ms ? formatNextRun(job.state.next_run_at_ms, i18n.language) : '-';
-                const errorHint = job.state.last_error
-                  ? t('cron.lastErrorWithDetail', { error: job.state.last_error })
-                  : t('cron.status.error');
 
                 return (
                   <div
@@ -260,17 +257,7 @@ const ScheduledTasksPage: React.FC = () => {
                     </div>
 
                     <div className='flex shrink-0 items-center gap-6px' onClick={(event) => event.stopPropagation()}>
-                      {!isManualOnly && <CronStatusTag job={job} />}
-                      {hasError && (
-                        <Tooltip content={errorHint}>
-                          <Attention
-                            theme='outline'
-                            size={16}
-                            className='shrink-0 text-danger-6'
-                            aria-label={errorHint}
-                          />
-                        </Tooltip>
-                      )}
+                      {(!isManualOnly || hasError) && <CronStatusTag job={job} />}
                       {!isManualOnly && (
                         <Switch size='small' checked={job.enabled} onChange={() => handleToggleEnabled(job)} />
                       )}

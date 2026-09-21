@@ -14,16 +14,23 @@ type StatusTone = 'paused' | 'error' | 'active';
 
 const CronStatusTag: React.FC<{ job: ICronJob }> = ({ job }) => {
   const { t } = useTranslation();
+  const isManualOnly = job.schedule.kind === 'cron' && !job.schedule.expr;
+  const hasError = job.state.last_status === 'error' || job.state.last_status === 'missed';
+  const errorHint = hasError
+    ? job.state.last_error
+      ? t('cron.lastErrorWithDetail', { error: job.state.last_error })
+      : t('cron.status.error')
+    : undefined;
 
   let color: StatusColor = 'green';
   let label = t('cron.status.active');
   let tone: StatusTone = 'active';
 
-  if (!job.enabled) {
+  if (!job.enabled && !(isManualOnly && hasError)) {
     color = 'gray';
     tone = 'paused';
     label = t('cron.status.paused');
-  } else if (job.state.last_status === 'error' || job.state.last_status === 'missed') {
+  } else if (hasError) {
     color = 'red';
     tone = 'error';
     label = t('cron.status.error');
@@ -32,6 +39,8 @@ const CronStatusTag: React.FC<{ job: ICronJob }> = ({ job }) => {
   return (
     <Tag
       size='small'
+      title={errorHint}
+      aria-label={errorHint}
       bordered
       color={color}
       className={`!rounded-full !px-9px !py-2px !text-12px !leading-16px !font-medium !shadow-none ${
