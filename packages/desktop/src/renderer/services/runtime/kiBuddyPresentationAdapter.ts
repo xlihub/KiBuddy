@@ -79,6 +79,7 @@ export function createKiBuddyPresentationAdapter(runtime: KiBuddyProductRuntime)
         avatar: brand.logoUrl,
       };
     },
+    resolveDocumentTitle: () => brand.productName,
     initializeDocument(root) {
       initializeKiBuddyDocument(root, runtime);
     },

@@ -57,6 +57,7 @@ const AION_UI_PRESENTATION_ADAPTER: ProductPresentationAdapter = {
   adaptAssistantDetailIdentity: (detail) => detail,
   adaptConversationAssistantIdentity: (assistant) => assistant,
   initializeDocument: () => {},
+  resolveDocumentTitle: (upstreamTitle) => upstreamTitle,
 };
 
 function getProductPresentationAdapter(): ProductPresentationAdapter {
@@ -164,4 +165,9 @@ export function getProductSkillsMarketDetailsUrl(language: string): string | nul
 /** Applies product metadata synchronously before React mounts its first business frame. */
 export function initializeRendererBrand(root: Document = document): void {
   getProductPresentationAdapter().initializeDocument(root);
+}
+
+/** Resolves the document title through the active product presentation adapter. */
+export function resolveProductDocumentTitle(upstreamTitle: string): string {
+  return getProductPresentationAdapter().resolveDocumentTitle(upstreamTitle);
 }

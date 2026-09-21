@@ -4,6 +4,7 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
+import { resolveProductDocumentTitle } from '@/renderer/services/runtime/productBrandRuntime';
 import React, { useEffect } from 'react';
 import { useLocation } from 'react-router-dom';
 import { useTranslation } from 'react-i18next';
@@ -26,7 +27,7 @@ const DocumentTitle: React.FC = () => {
   const { t, i18n } = useTranslation();
 
   useEffect(() => {
-    document.title = titleForPath(pathname, t);
+    document.title = resolveProductDocumentTitle(titleForPath(pathname, t));
   }, [pathname, t, i18n.language]);
 
   return null;
