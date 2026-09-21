@@ -109,9 +109,9 @@ describe('Ki-Buddy product release identity', () => {
       },
       updates: {
         provider: 'github',
-        repository: 'xlihub/Ki-Buddy',
+        repository: 'xlihub/KiBuddy',
         tagPrefix: 'ki-buddy-v',
-        releasePageUrl: 'https://github.com/xlihub/Ki-Buddy/releases',
+        releasePageUrl: 'https://github.com/xlihub/KiBuddy/releases',
       },
     });
   });
@@ -285,10 +285,10 @@ describe('Ki-Buddy product release identity', () => {
       },
     },
     {
-      name: 'the private source repository as the runtime update identity',
+      name: 'the retired repository as the runtime update identity',
       expectedError: 'Ki-Buddy update configuration is invalid',
       mutate: (config: typeof productConfigSource) => {
-        config.updates.repository = 'xlihub/KiBuddy';
+        config.updates.repository = 'xlihub/Ki-Buddy';
       },
     },
     {
@@ -651,9 +651,9 @@ describe('Ki-Buddy product release identity', () => {
           },
           runtimeUpdates: {
             provider: 'github',
-            repository: 'xlihub/Ki-Buddy',
+            repository: 'xlihub/KiBuddy',
             tagPrefix: 'ki-buddy-v',
-            releasePageUrl: 'https://github.com/xlihub/Ki-Buddy/releases',
+            releasePageUrl: 'https://github.com/xlihub/KiBuddy/releases',
           },
         },
         policySources: {
@@ -808,9 +808,9 @@ describe('Ki-Buddy product release identity', () => {
     });
     expect(identity.runtimeUpdates).toEqual({
       provider: 'github',
-      repository: 'xlihub/Ki-Buddy',
+      repository: 'xlihub/KiBuddy',
       tagPrefix: 'ki-buddy-v',
-      releasePageUrl: 'https://github.com/xlihub/Ki-Buddy/releases',
+      releasePageUrl: 'https://github.com/xlihub/KiBuddy/releases',
     });
     expect(identity.kiBuddy.tag).toBe(`ki-buddy-v${identity.kiBuddy.version}`);
     expect(identity.kiCore.tag).toBe(`ki-core-v${identity.kiCore.version}`);

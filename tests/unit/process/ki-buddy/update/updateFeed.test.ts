@@ -14,7 +14,7 @@ describe('Ki-Buddy update feed', () => {
       feedOptions: {
         owner: 'xlihub',
         provider: 'custom',
-        repo: 'Ki-Buddy',
+        repo: 'KiBuddy',
         tagPrefix: 'ki-buddy-v',
         updateProvider: KiBuddyGitHubProvider,
       },
@@ -26,7 +26,7 @@ describe('Ki-Buddy update feed', () => {
   it('uses the same product tag namespace for manual checks', () => {
     expect(createKiBuddyUpdateBridgeConfiguration(productConfig)).toMatchObject({
       allowRepositoryOverride: false,
-      repository: 'xlihub/Ki-Buddy',
+      repository: 'xlihub/KiBuddy',
       tagPrefix: 'ki-buddy-v',
     });
   });

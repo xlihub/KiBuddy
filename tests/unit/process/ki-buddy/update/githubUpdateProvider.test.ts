@@ -19,7 +19,7 @@ const makeProvider = (): KiBuddyGitHubProvider =>
     {
       owner: 'xlihub',
       provider: 'custom',
-      repo: 'Ki-Buddy',
+      repo: 'KiBuddy',
       tagPrefix: 'ki-buddy-v',
     },
     {} as AppUpdater,

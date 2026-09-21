@@ -32,9 +32,9 @@ const validConfig = {
   themes: { light: 'ki-buddy-light', dark: 'ki-buddy-dark' },
   updates: {
     provider: 'github',
-    repository: 'xlihub/Ki-Buddy',
+    repository: 'xlihub/KiBuddy',
     tagPrefix: 'ki-buddy-v',
-    releasePageUrl: 'https://github.com/xlihub/Ki-Buddy/releases',
+    releasePageUrl: 'https://github.com/xlihub/KiBuddy/releases',
   },
   brand: {
     productName: 'Ki-Buddy',
@@ -44,7 +44,7 @@ const validConfig = {
     links: {
       homepage: 'https://github.com/xlihub/KiBuddy',
       repository: 'https://github.com/xlihub/KiBuddy',
-      releases: 'https://github.com/xlihub/Ki-Buddy/releases',
+      releases: 'https://github.com/xlihub/KiBuddy/releases',
       support: 'https://github.com/xlihub/KiBuddy/issues',
       feedback: 'https://github.com/xlihub/KiBuddy/issues/new',
     },
@@ -171,7 +171,7 @@ describe('Ki-Buddy product configuration', () => {
         cliName: 'Ki CLI',
         links: {
           repository: 'https://github.com/xlihub/KiBuddy',
-          releases: 'https://github.com/xlihub/Ki-Buddy/releases',
+          releases: 'https://github.com/xlihub/KiBuddy/releases',
           support: 'https://github.com/xlihub/KiBuddy/issues',
         },
       },
@@ -405,11 +405,16 @@ describe('Ki-Buddy product configuration', () => {
     ).toThrow('brand link');
   });
 
-  it('rejects an update source that does not match the public distribution source', () => {
+  it.each([
+    { repository: 'iOfficeAI/AionUi' },
+    { repository: 'xlihub/Ki-Buddy' },
+    { releasePageUrl: 'https://github.com/xlihub/Ki-Buddy/releases' },
+    { provider: 'generic' },
+  ])('rejects an update source that does not match the source repository: %j', (updates) => {
     expect(() =>
       parseKiBuddyProductConfig({
         ...validConfig,
-        updates: { ...validConfig.updates, repository: 'iOfficeAI/AionUi' },
+        updates: { ...validConfig.updates, ...updates },
       })
     ).toThrow('update source');
   });

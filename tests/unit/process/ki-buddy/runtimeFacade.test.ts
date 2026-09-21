@@ -199,7 +199,7 @@ describe('Ki-Buddy main-process runtime facade', () => {
     expect(runtime.productExperience.featureState('team')).toBe('disabled');
     expect(runtime.updateBridge).toEqual({
       allowRepositoryOverride: false,
-      repository: 'xlihub/Ki-Buddy',
+      repository: 'xlihub/KiBuddy',
       source: 'github',
       tagPrefix: 'ki-buddy-v',
       userAgent: 'Ki-Buddy',
@@ -208,7 +208,7 @@ describe('Ki-Buddy main-process runtime facade', () => {
       feedOptions: {
         owner: 'xlihub',
         provider: 'custom',
-        repo: 'Ki-Buddy',
+        repo: 'KiBuddy',
         tagPrefix: 'ki-buddy-v',
         updateProvider: KiBuddyGitHubProvider,
       },
