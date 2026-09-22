@@ -44,6 +44,7 @@ function workflowJob(content: string, name: string): string {
 describe('release packaging configuration', () => {
   it.each([
     ['pr-checks.yml', 'unit-tests'],
+    ['pr-checks.yml', 'coverage-tests'],
     ['build-and-release.yml', 'code-quality'],
   ])('checks out complete history before project distribution unit tests in %s / %s', (workflowName, jobName) => {
     const workflow = readProjectFile(`.github/workflows/${workflowName}`);
