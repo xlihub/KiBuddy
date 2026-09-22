@@ -120,19 +120,19 @@ describe('Ki-Buddy product release identity', () => {
     expect(() => verifyKiBuddyRelease(projectRoot, { skipGit: true })).not.toThrow();
   });
 
-  it('validates the 0.1.8 release context for the private source repository', () => {
+  it('validates the 0.1.9 release context for the private source repository', () => {
     expect(
       verifyKiBuddyRelease(projectRoot, {
         commit: 'a'.repeat(40),
         repository: 'xlihub/KiBuddy',
         skipGit: true,
-        tag: 'ki-buddy-v0.1.8',
+        tag: 'ki-buddy-v0.1.9',
       })
     ).toMatchObject({
       kiBuddy: {
         repository: 'xlihub/KiBuddy',
-        version: '0.1.8',
-        tag: 'ki-buddy-v0.1.8',
+        version: '0.1.9',
+        tag: 'ki-buddy-v0.1.9',
         releaseCommit: 'a'.repeat(40),
       },
     });
@@ -146,7 +146,7 @@ describe('Ki-Buddy product release identity', () => {
           commit: 'a'.repeat(40),
           repository,
           skipGit: true,
-          tag: 'ki-buddy-v0.1.8',
+          tag: 'ki-buddy-v0.1.9',
         })
       ).toThrow('Ki-Buddy release repository must be xlihub/KiBuddy');
     }
