@@ -3,6 +3,28 @@
 本文件记录 Ki-Buddy 产品变化、AionUi 上游变化，以及每个版本固定的 Ki-Core/AionCore 来源。
 上游 AionUi 的原始变更记录继续保存在 [`CHANGELOG.md`](CHANGELOG.md)。
 
+## [0.1.9] - 2026-09-22
+
+### Ki-Buddy 定制变化
+
+- `ki-buddy-v0.1.8` 因发布测试未获取完整 Git 历史而失败，未生成安装包或 GitHub Release；保留原 tag，本版本修复发布及 PR 覆盖率测试的历史获取，并继续发布下列尚未发布的产品变化。
+- 将产品源码身份和正式 GitHub Release provenance 迁移到 `xlihub/KiBuddy`；历史分发仓库 `xlihub/Ki-Buddy` 与源码仓库分别配置。应用内自动更新、手动检查更新和版本下载入口改为新仓库，Web CLI 安装脚本仍沿用原有分发配置。
+- 支持手动配置模型、自定义网关和连接选项，并支持项目预设中的 Bearer 认证配置。
+- 增加项目专属安装包的品牌、身份隔离和多平台构建配置，并完善安装清理和产物验证。
+- 修复 macOS x64 安装包的 keytar 原生依赖打包问题。
+- 修复登录、首页、定时任务和会话页面切换后窗口标题被覆盖的问题，保持 Ki-Buddy 产品名称。
+- 修复查看定时任务失败详情时触发白屏的问题，并让仅手动运行的任务能够显示失败状态和错误信息。
+
+### AionUi 上游更新
+
+- 继续基于 [AionUi v2.1.61](https://github.com/iOfficeAI/AionUi/releases/tag/v2.1.61)，commit `1afdf95c187f24198ab502a3c86cb2ef40bc3c6f`；本版本没有引入新的 AionUi 上游变化。
+
+### Ki-Core 更新
+
+- 与 0.1.8 版本准备保持相同的 Ki-Core pin，没有额外更新；完整差异见 [ki-core-v0.1.4...ki-core-v0.1.5](https://github.com/xlihub/Ki-Core/compare/ki-core-v0.1.4...ki-core-v0.1.5)。
+- 相对最近正式发布的 Ki-Buddy 0.1.7，从 Ki-Core 0.1.4 更新到 [Ki-Core 0.1.5](https://github.com/xlihub/Ki-Core/releases/tag/ki-core-v0.1.5)，release commit `d0fddf5ffcee9cacaebde05e2914beac27f93a2a`；采用 Ki-Model 0.1.1 的自定义网关、手动模型和连接选项契约，并包含并发凭据更新修复。
+- Ki-Core 继续对应 [AionCore v0.1.72](https://github.com/iOfficeAI/AionCore/releases/tag/v0.1.72)，peeled commit `57a34cc1b1a3b17bcc023de06b9e6768fceac36f`。
+
 ## [0.1.8] - 2026-09-21
 
 ### Ki-Buddy 定制变化
