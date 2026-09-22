@@ -42,9 +42,12 @@ function workflowJob(content: string, name: string): string {
 }
 
 describe('release packaging configuration', () => {
-  it('checks out complete history before project distribution unit tests', () => {
-    const workflow = readProjectFile('.github/workflows/pr-checks.yml');
-    const unitTestsJob = workflowJob(workflow, 'unit-tests');
+  it.each([
+    ['pr-checks.yml', 'unit-tests'],
+    ['build-and-release.yml', 'code-quality'],
+  ])('checks out complete history before project distribution unit tests in %s / %s', (workflowName, jobName) => {
+    const workflow = readProjectFile(`.github/workflows/${workflowName}`);
+    const unitTestsJob = workflowJob(workflow, jobName);
     const checkoutStep = workflowStep(unitTestsJob, 'Checkout code');
 
     expect(checkoutStep).toContain('fetch-depth: 0');
