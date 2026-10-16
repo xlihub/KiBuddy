@@ -440,7 +440,7 @@ describe('Ki-Buddy unpacked product verification', () => {
     expect(materialized).toMatchObject({ packageRoot: installPath, unpackedPath: installPath });
     materialized.cleanup();
     expect(calls).toEqual([
-      { command: installerPath, args: ['/S', `/D=${installPath}`], windowsVerbatimArguments: true },
+      { command: installerPath, args: ['/S', '--force-run', `/D=${installPath}`], windowsVerbatimArguments: true },
       { command: uninstallPath, args: ['/S', `_?=${installPath}`], windowsVerbatimArguments: true },
     ]);
     expect(existsSync(tempRoot)).toBe(false);
@@ -585,6 +585,81 @@ describe('Ki-Buddy unpacked product verification', () => {
     }
   );
 
+  it('starts the silently installed app before checking its runtime-registered URL protocol', () => {
+    const identity = createProjectPackagingOverlay();
+    const buildPlan = projectBuildPlan(identity, 'windows-x64');
+    const fixture = createWindowsFixture(identity, buildPlan);
+    const tempRoot = mkdtempSync(join(tmpdir(), 'ki-buddy-first-launch-'));
+    const installerPath = join(tempRoot, 'project.exe');
+    const installPath = join(tempRoot, 'installed');
+    let launched = false;
+    writeFileSync(installerPath, 'installer');
+    const materialized = materializeKiBuddyInstaller(installerPath, 'windows-x64', identity, {
+      tempRoot,
+      execute(command: string, args: string[]) {
+        if (command !== installerPath) return;
+        cpSync(fixture, installPath, { recursive: true });
+        launched = args.includes('--force-run');
+      },
+    });
+    try {
+      expect(() =>
+        verifyKiBuddyWindowsInstallation(materialized.unpackedPath, identity, 'windows-x64', {
+          readWindowsExecutableMetadata: () => ({
+            productName: identity.desktop.productName,
+            iconWidth: 32,
+            iconHeight: 32,
+          }),
+          readWindowsProtocolRegistrations: (schemes: string[]) =>
+            launched
+              ? schemes.map((scheme) => ({
+                  scheme,
+                  urlProtocolPresent: true,
+                  command: `"${join(installPath, `${identity.desktop.executableName}.exe`)}" "%1"`,
+                }))
+              : [],
+          protocolRegistrationAttempts: 1,
+        })
+      ).not.toThrow();
+    } finally {
+      materialized.cleanup();
+      rmSync(fixture, { recursive: true, force: true });
+    }
+  });
+
+  it('waits for the first launched app to finish registering its protocol', () => {
+    const identity = createProjectPackagingOverlay();
+    const fixture = createWindowsFixture(identity, projectBuildPlan(identity, 'windows-x64'));
+    let reads = 0;
+    let waits = 0;
+    try {
+      verifyKiBuddyWindowsInstallation(fixture, identity, 'windows-x64', {
+        readWindowsExecutableMetadata: () => ({
+          productName: identity.desktop.productName,
+          iconWidth: 32,
+          iconHeight: 32,
+        }),
+        readWindowsProtocolRegistrations: (schemes: string[]) => {
+          reads += 1;
+          return reads < 3
+            ? []
+            : schemes.map((scheme) => ({
+                scheme,
+                urlProtocolPresent: true,
+                command: `"${join(fixture, `${identity.desktop.executableName}.exe`)}" "%1"`,
+              }));
+        },
+        waitForProtocolRegistration: () => {
+          waits += 1;
+        },
+        protocolRegistrationAttempts: 3,
+      });
+      expect({ reads, waits }).toEqual({ reads: 3, waits: 2 });
+    } finally {
+      rmSync(fixture, { recursive: true, force: true });
+    }
+  });
+
   it.each(['windows-x64', 'windows-arm64'])(
     'accepts a %s installation with matching architecture, metadata, protocol, and provenance',
     (platform) => {
@@ -686,6 +761,7 @@ describe('Ki-Buddy unpacked product verification', () => {
               urlProtocolPresent: true,
               command: '"C:\\Other\\Application.exe" "%1"',
             })),
+          protocolRegistrationAttempts: 1,
         })
       ).toThrow('Windows URL protocol registration does not match');
     } finally {

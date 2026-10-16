@@ -294,7 +294,9 @@ function materializeKiBuddyInstaller(installerPath, platform, packagingIdentity,
     }
     if (platform.startsWith('windows-')) {
       const installPath = path.join(tempRoot, 'installed');
-      execute(installerPath, ['/S', `/D=${installPath}`], {
+      // NSIS silent installs do not launch the app unless explicitly requested.
+      // Electron registers the project URL protocol during the first launch.
+      execute(installerPath, ['/S', '--force-run', `/D=${installPath}`], {
         windowsVerbatimArguments: true,
         stdio: ['ignore', 'ignore', 'pipe'],
       });
@@ -501,23 +503,32 @@ function verifyKiBuddyWindowsInstallation(applicationRoot, packagingIdentity, ex
     throw new Error('Windows executable metadata or icon does not match the expected packaging identity');
   }
   const protocolSchemes = packagingIdentity.desktop.protocols.flatMap((protocol) => protocol.schemes);
-  const registrationResult = (options.readWindowsProtocolRegistrations ?? readWindowsProtocolRegistrations)(
-    protocolSchemes
-  );
-  const registrations = Array.isArray(registrationResult) ? registrationResult : [];
+  const readRegistrations = options.readWindowsProtocolRegistrations ?? readWindowsProtocolRegistrations;
+  const waitForRegistration =
+    options.waitForProtocolRegistration ??
+    (() => {
+      Atomics.wait(new Int32Array(new SharedArrayBuffer(4)), 0, 0, 500);
+    });
+  const attempts = options.protocolRegistrationAttempts ?? 60;
   const normalizedExecutablePath = executablePath.replaceAll('\\', '/').toLowerCase();
-  if (
-    protocolSchemes.some((scheme) => {
+  let registrations = [];
+  for (let attempt = 0; attempt < attempts; attempt += 1) {
+    const registrationResult = readRegistrations(protocolSchemes);
+    registrations = Array.isArray(registrationResult) ? registrationResult : [];
+    const registered = protocolSchemes.every((scheme) => {
       const registration = registrations.find((entry) => entry?.scheme === scheme);
       return (
-        registration?.urlProtocolPresent !== true ||
-        typeof registration.command !== 'string' ||
-        !registration.command.replaceAll('\\', '/').toLowerCase().includes(normalizedExecutablePath)
+        registration?.urlProtocolPresent === true &&
+        typeof registration.command === 'string' &&
+        registration.command.replaceAll('\\', '/').toLowerCase().includes(normalizedExecutablePath)
       );
-    })
-  ) {
-    throw new Error('Windows URL protocol registration does not match the installed application');
+    });
+    if (registered) return;
+    if (attempt < attempts - 1) waitForRegistration();
   }
+  throw new Error(
+    `Windows URL protocol registration does not match the installed application: expected ${executablePath}; observed ${JSON.stringify(registrations)}`
+  );
 }
 
 function runCli() {
