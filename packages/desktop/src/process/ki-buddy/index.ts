@@ -309,7 +309,8 @@ export function createKiBuddyRuntime(
   const identityMode = config.distribution?.identityMode ?? 'agents';
   const integrations = config.distribution?.integrations ?? ['agentsGateway'];
   const productExperience = createKiBuddyProductExperience(config.experience);
-  const updatesEnabled = isProductFeatureEnabled(productExperience, 'githubResources');
+  // Project distributions are delivered manually and must never consume generic releases (ADR 0014).
+  const updatesEnabled = !config.distribution && isProductFeatureEnabled(productExperience, 'githubResources');
   const coreAuthOptions = identityMode === 'agents' ? createKiBuddyCoreAuthOptions() : null;
   const coreTransport = coreAuthOptions ? new KiBuddyMainCoreTransport(coreAuthOptions.coreCsrfToken) : null;
   startProductFeatureLifecycles(productExperience, [
