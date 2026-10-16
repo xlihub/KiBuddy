@@ -22,6 +22,8 @@
 
 `delivery-records.json` 保存已经确认交付的长期记录。确认安装验收和持久保管副本后，维护者按 `schemas/delivery-record.schema.json` 添加项目版本、源码、注册 revision、manifest digest、candidate attempt、平台 checksum 和保管引用。已记录版本不能再次生成正式 candidate；安装包丢失时发布新的 patch 版本。
 
+项目包当前只支持手动交付（ADR 0014）。只要运行配置包含 `distribution`，主进程就不启用通用版自动更新源和手动检查源，包括正式、预览、`agents` 和 `local` 项目。项目版本不与 `ki-buddy-v*` 通用版本比较；此规则独立于 `githubResources` 功能开关，不改变账号、Agents 或其他 GitHub 资源的可用性。通用版继续使用原更新源。
+
 ## 中信证券 zxzq
 
 `zxzq` 0.0.1 基于 Ki-Buddy `ki-buddy-v0.1.9`（`0b53d298493d412e05d0a7c8446670206194a089`），使用 `agents` 身份和 `agentsGateway`，保留通用版账号、Agents 与默认服务配置。仅关闭 `about` 和 `feedback`，隐藏设置中的“关于”和窗口右上角“反馈问题”。其他功能与 GitHub 资源策略继承通用版。
