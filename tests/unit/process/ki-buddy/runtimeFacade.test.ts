@@ -241,6 +241,47 @@ describe('Ki-Buddy main-process runtime facade', () => {
     expect(selection.runtime?.updateFeed).toBeNull();
   });
 
+  it.each(['formal', 'preview'] as const)(
+    'does not offer generic releases to an Agents project distribution in %s mode',
+    (mode) => {
+      const appPath = createAppPath('ki-buddy');
+      appPaths.push(appPath);
+      const baseConfig = KI_BUDDY_PRODUCT_CONFIG_RESULT.config!;
+      const selection = createKiBuddyRuntime(
+        { appPath, resetPassword: false, webUi: false },
+        {
+          config: {
+            ...baseConfig,
+            distribution: {
+              schemaVersion: 1,
+              distributionId: 'zxzq',
+              identityMode: 'agents',
+              mode,
+              dataDirectory: 'Ki-Buddy-ZXZQ',
+              credentialNamespace: 'ki-buddy-zxzq',
+              integrations: ['agentsGateway'],
+              nonSensitiveConfig: {},
+            },
+            experience: {
+              ...baseConfig.experience,
+              features: { ...baseConfig.experience.features, about: 'disabled', feedback: 'disabled' },
+            },
+          },
+          error: null,
+        }
+      );
+
+      expect(selection.runtime).toMatchObject({
+        identityMode: 'agents',
+        integrations: ['agentsGateway'],
+        updateBridge: null,
+        updateFeed: null,
+      });
+      expect(selection.runtime?.productExperience.featureState('githubResources')).toBe('enabled');
+      expect(installTransportMock).toHaveBeenCalledOnce();
+    }
+  );
+
   it('starts a local project runtime without installing the Agents account transport', () => {
     const appPath = createAppPath('ki-buddy');
     appPaths.push(appPath);

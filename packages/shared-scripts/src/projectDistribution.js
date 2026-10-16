@@ -1055,6 +1055,7 @@ function verifyProjectDistributionArtifact({
   materializeInstaller,
   verifyUnpacked,
   verifyWindowsInstallation,
+  onProgress = () => {},
 }) {
   if (buildPlan?.schemaVersion !== 1 || !['preview', 'formal'].includes(buildPlan.mode)) {
     throw new Error('Project artifact verification requires a validated build plan');
@@ -1082,14 +1083,18 @@ function verifyProjectDistributionArtifact({
     `${platform} standalone build evidence`
   );
   const unpackedVerification = require('./kiBuddyUnpacked');
+  onProgress(`Installing ${platform} artifact`);
   const materialized = (materializeInstaller ?? unpackedVerification.materializeKiBuddyInstaller)(
     installerPath,
     platform,
-    buildPlan.packagingIdentity
+    buildPlan.packagingIdentity,
+    { onProgress }
   );
+  onProgress(`Installed ${platform} artifact`);
   let verificationError;
   let verificationFailed = false;
   try {
+    onProgress(`Checking ${platform} packaged resources`);
     const verification = (verifyUnpacked ?? unpackedVerification.verifyKiBuddyUnpacked)(
       path.resolve(projectRoot),
       materialized.unpackedPath,
@@ -1100,6 +1105,7 @@ function verifyProjectDistributionArtifact({
       { expectedPlatform: platform }
     );
     if (config.runtimePlatform === 'win32') {
+      onProgress(`Checking ${platform} executable and URL protocol`);
       (verifyWindowsInstallation ?? unpackedVerification.verifyKiBuddyWindowsInstallation)(
         materialized.unpackedPath,
         buildPlan.packagingIdentity,
@@ -1112,9 +1118,12 @@ function verifyProjectDistributionArtifact({
   } catch (error) {
     verificationError = error;
     verificationFailed = true;
+    onProgress(`Verification failed: ${String(error)}`);
   }
   try {
+    onProgress(`Cleaning up ${platform} temporary installation`);
     materialized.cleanup();
+    onProgress(`Cleaned up ${platform} temporary installation`);
   } catch (cleanupError) {
     if (verificationFailed) {
       throw new AggregateError(
@@ -1263,6 +1272,7 @@ function runCli() {
       artifactsRoot: path.resolve(value('--artifacts-root')),
       platform: value('--platform'),
       outputDirectory: path.resolve(value('--output-directory')),
+      onProgress: (message) => process.stderr.write(`[project-verification] ${message}\n`),
     });
     process.stdout.write(`${JSON.stringify(result, null, 2)}\n`);
     return;
