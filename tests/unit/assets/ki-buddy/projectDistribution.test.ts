@@ -379,12 +379,10 @@ describe('project distribution build contract', () => {
     const manifest = JSON.parse(
       readFileSync(resolvePath(projectRoot, 'distributions/examples/zxjt.manifest.json'), 'utf8')
     );
-    const branchManifest = JSON.parse(readFileSync(resolvePath(projectRoot, 'distribution-manifest.json'), 'utf8'));
     const deliveryRecords = JSON.parse(
       readFileSync(resolvePath(projectRoot, 'distributions/delivery-records.json'), 'utf8')
     );
 
-    expect(branchManifest).toEqual(manifest);
     expect(manifest).toMatchObject({
       schemaVersion: 2,
       platforms: {
@@ -428,6 +426,21 @@ describe('project distribution build contract', () => {
         requestedPlatforms: ['windows-x64', 'windows-arm64'],
       }).deliveryHistory.deliveredVersions
     ).toEqual([]);
+  });
+
+  it('resolves the current project branch manifest against its own registration', () => {
+    const projectRoot = resolvePath(__dirname, '../../../..');
+    const registry = JSON.parse(readFileSync(resolvePath(projectRoot, 'distributions/registry.json'), 'utf8'));
+    const manifest = JSON.parse(readFileSync(resolvePath(projectRoot, 'distribution-manifest.json'), 'utf8'));
+    const plan = resolve({ registry, manifest, requestedPlatforms: manifest.platforms.preview });
+
+    expect(plan).toMatchObject({ distributionId: manifest.distributionId, identityMode: manifest.identityMode });
+    expect(() =>
+      execFileSync('git', ['merge-base', '--is-ancestor', manifest.baseline.commit, 'HEAD'], {
+        cwd: projectRoot,
+        stdio: 'ignore',
+      })
+    ).not.toThrow();
   });
 
   it('keeps delivery record schema platforms and checksums aligned with the supported project build matrix', () => {

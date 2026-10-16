@@ -1,27 +1,27 @@
 {
   "schemaVersion": 2,
-  "distributionId": "zxjt",
-  "version": "0.1.0",
+  "distributionId": "zxzq",
+  "version": "0.0.1",
   "baseline": {
     "repository": "xlihub/KiBuddy",
-    "commit": "b1f9f1a7b3e8c903f300ad2a832543d340858584"
+    "commit": "0b53d298493d412e05d0a7c8446670206194a089"
   },
   "brand": {
     "productName": "Ki-Buddy",
-    "packageName": "ki-buddy-zxjt",
-    "description": "Ki-Buddy local project distribution"
+    "packageName": "ki-buddy-zxzq",
+    "description": "Ki-Buddy project distribution"
   },
-  "identityMode": "local",
-  "integrations": [],
-  "disabledFeatures": ["account", "about", "feedback", "githubResources"],
-  "platforms": {
-    "preview": ["macos-arm64"],
-    "formal": ["windows-x64", "windows-arm64"]
-  },
+  "identityMode": "agents",
+  "integrations": ["agentsGateway"],
+  "disabledFeatures": ["about", "feedback"],
+  "nonSensitiveConfig": {},
   "resources": {
     "png": "resources/ki-buddy/app.png",
     "ico": "resources/ki-buddy/app.ico",
     "icns": "resources/ki-buddy/app.icns"
   },
-  "nonSensitiveConfig": {}
+  "platforms": {
+    "preview": ["macos-arm64"],
+    "formal": ["windows-x64", "windows-arm64"]
+  }
 }
