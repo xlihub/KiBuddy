@@ -1,0 +1,27 @@
+{
+  "schemaVersion": 2,
+  "distributionId": "zxzq",
+  "version": "0.0.1",
+  "baseline": {
+    "repository": "xlihub/KiBuddy",
+    "commit": "0b53d298493d412e05d0a7c8446670206194a089"
+  },
+  "brand": {
+    "productName": "Ki-Buddy",
+    "packageName": "ki-buddy-zxzq",
+    "description": "Ki-Buddy project distribution"
+  },
+  "identityMode": "agents",
+  "integrations": ["agentsGateway"],
+  "disabledFeatures": ["about", "feedback"],
+  "nonSensitiveConfig": {},
+  "resources": {
+    "png": "resources/ki-buddy/app.png",
+    "ico": "resources/ki-buddy/app.ico",
+    "icns": "resources/ki-buddy/app.icns"
+  },
+  "platforms": {
+    "preview": ["macos-arm64"],
+    "formal": ["windows-x64", "windows-arm64"]
+  }
+}
