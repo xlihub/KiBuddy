@@ -875,9 +875,6 @@ function resolveProjectDistributionBuildPlan(input) {
   if (request.mode === 'formal' && registration.lifecycle !== 'active') {
     throw new Error('Only active project registrations can create formal candidates');
   }
-  if (request.mode === 'formal' && registration.identityMode !== 'local') {
-    throw new Error('Only local project registrations can create formal candidates');
-  }
   if (request.mode === 'preview' && registration.lifecycle === 'retired') {
     throw new Error('Retired project registrations cannot create previews');
   }
@@ -887,6 +884,11 @@ function resolveProjectDistributionBuildPlan(input) {
   if (manifest.identityMode === 'local') {
     if (!manifest.disabledFeatures.includes('account')) {
       throw new Error('Local project distributions must disable account');
+    }
+  }
+  if (request.mode === 'formal' && manifest.identityMode === 'agents') {
+    if (manifest.disabledFeatures.includes('account') || !manifest.integrations.includes('agentsGateway')) {
+      throw new Error('Agents project distributions must enable account and agentsGateway for formal candidates');
     }
   }
   for (const integration of manifest.integrations) {
@@ -1117,7 +1119,8 @@ function verifyProjectDistributionArtifact({
     if (verificationFailed) {
       throw new AggregateError(
         [verificationError, cleanupError],
-        `Artifact verification failed: ${String(verificationError)}; installer cleanup failed: ${String(cleanupError)}`
+        `Artifact verification failed: ${String(verificationError)}; installer cleanup failed: ${String(cleanupError)}`,
+        { cause: cleanupError }
       );
     }
     throw cleanupError;

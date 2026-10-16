@@ -37,6 +37,43 @@
         "nonSensitiveConfigKeys": ["modelPreset"],
         "buildCredentialNames": []
       }
+    },
+    {
+      "distributionId": "zxzq",
+      "lifecycle": "active",
+      "identityMode": "agents",
+      "identities": {
+        "formal": {
+          "appId": "com.xlihub.ki-buddy.zxzq",
+          "applicationName": "Ki-Buddy",
+          "executableName": "Ki-Buddy-ZXZQ",
+          "protocolScheme": "ki-buddy-zxzq",
+          "dataDirectory": "Ki-Buddy-ZXZQ",
+          "credentialNamespace": "ki-buddy-zxzq"
+        },
+        "preview": {
+          "appId": "com.xlihub.ki-buddy.zxzq.preview",
+          "applicationName": "Ki-Buddy",
+          "executableName": "Ki-Buddy-ZXZQ-Preview",
+          "protocolScheme": "ki-buddy-zxzq-preview",
+          "dataDirectory": "Ki-Buddy-ZXZQ-Preview",
+          "credentialNamespace": "ki-buddy-zxzq-preview"
+        }
+      },
+      "allowed": {
+        "platforms": {
+          "preview": ["macos-arm64"],
+          "formal": ["windows-x64", "windows-arm64"]
+        },
+        "requiredPlatforms": {
+          "preview": ["macos-arm64"],
+          "formal": ["windows-x64", "windows-arm64"]
+        },
+        "integrations": ["agentsGateway"],
+        "disabledFeatures": ["about", "feedback"],
+        "nonSensitiveConfigKeys": [],
+        "buildCredentialNames": []
+      }
     }
   ]
 }

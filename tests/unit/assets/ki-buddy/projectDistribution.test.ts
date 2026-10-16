@@ -1047,13 +1047,13 @@ describe('project distribution build contract', () => {
     );
   });
 
-  it('rejects a formal candidate for a non-local project registration', () => {
+  it('rejects an agents formal candidate without account and gateway support', () => {
     expect(() =>
       resolveFormal({
         registry: createRegistration({ identityMode: 'agents' }),
         manifest: createManifest({ identityMode: 'agents' }),
       })
-    ).toThrowError(/only local project registrations/i);
+    ).toThrowError(/must enable account and agentsGateway/i);
   });
 
   it('rejects a version that already has a confirmed delivery record', () => {
@@ -1251,5 +1251,85 @@ describe('project distribution build contract', () => {
     expect(() =>
       resolve({ manifest: createManifest({ nonSensitiveConfig: { credentialScope: 'formal' } }) })
     ).toThrowError(/credential/i);
+  });
+});
+
+describe('ZXZQ project distribution', () => {
+  const registry = JSON.parse(readFileSync(resolvePath('distributions/registry.json'), 'utf8'));
+  const manifest = JSON.parse(readFileSync(resolvePath('distributions/examples/zxzq.manifest.json'), 'utf8'));
+  const productConfig = JSON.parse(readFileSync(resolvePath('ki-buddy-product.json'), 'utf8'));
+  const build = (overrides: Record<string, unknown> = {}) =>
+    resolveFormal({
+      registry,
+      manifest,
+      source: {
+        repository: 'xlihub/KiBuddy',
+        commit: SOURCE_SHA,
+        treeState: 'committed',
+        branch: 'distribution/zxzq',
+        branchHead: SOURCE_SHA,
+        ruleset: { ruleTypes: ['deletion', 'non_fast_forward'], rulesetIds: [17] },
+      },
+      requestedPlatforms: ['windows-x64', 'windows-arm64'],
+      kiCore: productConfig.kiCore,
+      ...overrides,
+    });
+
+  it('preserves the general product capabilities except About and Feedback', () => {
+    const plan = build();
+    expect(plan.productConfig.experience).toEqual({
+      ...productConfig.experience,
+      features: { ...productConfig.experience.features, about: 'disabled', feedback: 'disabled' },
+    });
+    expect(plan.productConfig.distribution).toMatchObject({
+      identityMode: 'agents',
+      integrations: ['agentsGateway'],
+      nonSensitiveConfig: {},
+    });
+    expect(plan.productConfig.defaults).toEqual(productConfig.defaults);
+  });
+
+  it('builds version 0.0.1 for both Windows architectures from the 0.1.9 baseline', () => {
+    const plan = build();
+    expect({ version: plan.version, baseline: plan.baseline.commit }).toEqual({
+      version: '0.0.1',
+      baseline: '0b53d298493d412e05d0a7c8446670206194a089',
+    });
+    expect(plan.platforms).toEqual(['windows-x64', 'windows-arm64']);
+    expect(plan.kiCore.commit).toBe(productConfig.kiCore.commit);
+  });
+
+  it('isolates the project installation and account credentials', () => {
+    const plan = build();
+    expect(plan.packagingIdentity.desktop).toMatchObject({
+      appId: 'com.xlihub.ki-buddy.zxzq',
+      executableName: 'Ki-Buddy-ZXZQ',
+      productName: 'Ki-Buddy',
+    });
+    expect(plan.runtimeIdentity).toEqual({
+      dataDirectory: 'Ki-Buddy-ZXZQ',
+      credentialNamespace: 'ki-buddy-zxzq',
+    });
+  });
+
+  it('rejects omission of either required Windows installer', () => {
+    expect(() => build({ requestedPlatforms: ['windows-x64'] })).toThrowError(/exactly match/i);
+    expect(() => build({ requestedPlatforms: ['windows-arm64'] })).toThrowError(/exactly match/i);
+  });
+
+  it('rejects changing the project to local identity', () => {
+    expect(() => build({ manifest: { ...manifest, identityMode: 'local' } })).toThrowError(/identityMode.*match/i);
+  });
+
+  it('rejects removing the Agents gateway', () => {
+    expect(() => build({ manifest: { ...manifest, integrations: [] } })).toThrowError(
+      /must enable account and agentsGateway/i
+    );
+  });
+
+  it('rejects disabling the account for an agents formal build', () => {
+    expect(() => build({ manifest: { ...manifest, disabledFeatures: ['about', 'feedback', 'account'] } })).toThrowError(
+      /must enable account and agentsGateway/i
+    );
   });
 });
