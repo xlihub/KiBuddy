@@ -272,6 +272,7 @@ function materializeKiBuddyInstaller(installerPath, platform, packagingIdentity,
       }
     }
     if (uninstallPath) {
+      options.onProgress?.(`Uninstalling ${uninstallPath}`);
       try {
         execute(uninstallPath, ['/S', `_?=${path.dirname(uninstallPath)}`], {
           windowsVerbatimArguments: true,
@@ -280,6 +281,7 @@ function materializeKiBuddyInstaller(installerPath, platform, packagingIdentity,
       } catch {
         // Verification already completed; removal of the ephemeral install directory still continues.
       }
+      options.onProgress?.('Uninstaller finished');
     }
     fs.rmSync(tempRoot, { recursive: true, force: true, maxRetries: 5, retryDelay: 200 });
   };
